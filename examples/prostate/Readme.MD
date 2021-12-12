@@ -163,18 +163,10 @@ for example
 
 ## 4. Results on 4 clients for Central vs. FedAvg vs. FedProx
 
-### 4.1 Validation curve 
+### Validation curve 
 Let's summarize the result of the experiments run above. We compare the final validation scores of 
 the global models for different settings. In this example, each client compute their validation scores using their own
 validation set. 
 
-The tensorboard curve for validation dice of the global model for the 1000 epochs during training is shown below
-![All training curve](./figs/all_training.jpg)
-
-### 4.2 Best model
-
-| Config	            |  	Val score	| 
-|--------------------| ----------- |  
-| prostate_central 	 | 	0.	| 
-| prostate_fedavg  	 | 	0.	| 
-| prostate_fedprox   | 	0.	|
+The tensorboard curve for validation dice of the global model for the 1000 epochs (100 rounds, 10 local epochs per round) during training is shown below
+![All training curve](./figs/all_training.png)
