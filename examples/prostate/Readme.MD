@@ -102,7 +102,7 @@ Press y and enter when prompted.
 In the following experiments, we will be using 4 clients. Let's rename and make additional client folders as
 
     mv poc workspace_prostate
-    mv workspace_prostate/client workspace_prostate/client_All
+    mv workspace_prostate/site-1 workspace_prostate/client_All
     for dataset in I2CVB MSD NCI_ISBI_3T NCI_ISBI_Dx; do
       cp -r workspace_prostate/client_All workspace_prostate/client_${dataset}
     done
@@ -120,31 +120,30 @@ We only cover POC mode in this example. To run it with Secure mode, please refer
 FL training will be run with automatic script utilizing the FLAdminAPI functionality.    
 The [run_poc.sh](./run_poc.sh) script follows the pattern:
 
-    ./run_poc.sh [config] [run] [dataset_base_dir] [datalist_json_dir]
+    ./run_poc.sh [config] [run] [client_ids]
 
 `[config]` is the app that will be used for the FL training, in this example, this includes prostate_fedavg, prostate_fedprox, and prostate_central.  
 `[run]` is the run number for nvflare experiment, a unique run number will be needed for each experiment.  
-`[datalist_base_dir]` is the directory of the dataset, in this experiment it is ./data_preparation/dataset  
-`[datalist_json_dir]` is the directory of the datalist json files, in this experiment it is ./data_preparation/datalists  
+`[client_ids]` is the list of all candidate client IDs, in this experiment it is either "I2CVB MSD NCI_ISBI_3T NCI_ISBI_Dx" for 4-client experiment, or "All" for centralized training.    
 
 This script will start the FL server and clients automatically to run FL experiments on localhost. 
-Each client can be assigned a GPU using `export CUDA_VISIBLE_DEVICES=${gpu_idx}` in the [run_poc.sh](./run_poc.sh). 
+Each client will be alternately assigned a GPU using `export CUDA_VISIBLE_DEVICES=${gpu_idx}` in the [run_poc.sh](./run_poc.sh). 
 In this example, we run 4 clients on two GPUs, two client for each GPU with 12 GB memory.
 
 ### 3.1 FedAvg 
 To run FL with fedavg, we use
 
-    ./run_poc.sh prostate_fedavg 1 ${PWD}/data_preparation/dataset ${PWD}/data_preparation/datalists/
+    ./run_poc.sh prostate_fedavg 1 "I2CVB MSD NCI_ISBI_3T NCI_ISBI_Dx"
 
 ### 3.2 FedProx 
 To run FL with fedprox, we use
 
-    ./run_poc.sh prostate_fedprox 2 ${PWD}/data_preparation/dataset ${PWD}/data_preparation/datalists/
+    ./run_poc.sh prostate_fedprox 2 "I2CVB MSD NCI_ISBI_3T NCI_ISBI_Dx"
 
 ### 3.3 Centralized training
 To simulate a centralized training baseline, we run FL with 1 client using all the training data. 
 
-    ./run_poc.sh prostate_central 3 ${PWD}/data_preparation/dataset ${PWD}/data_preparation/datalists/
+    ./run_poc.sh prostate_central 3 "All"
 
 > **_NOTE:_** You can always use the admin console to manually abort the automatically started runs 
   using `abort all`. An automatic shutdown is useful here for development as code changes 
