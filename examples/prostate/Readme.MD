@@ -77,7 +77,7 @@ bash data_conversion_I2CVB.sh
 
 [**MSD**](http://medicaldecathlon.com/): [data link](https://drive.google.com/drive/folders/1HqEgzS8BV2c7xYNrZdEAnrHk7osJJ--2)
 
-Download "Task05_Prostate.tar" to ./Raw/I2CVB, and extract with
+Download "Task05_Prostate.tar" to ./Raw/MSD, and extract with
 
 ```
 tar xf ./Raw/MSD/Task05_Prostate.tar -C ./Raw/MSD
@@ -98,7 +98,7 @@ unzip ./Raw/NCI_ISBI/Mask/NCI-ISBI\ 2013\ Prostate\ Challenge\ -\ Training.zip -
 unzip ./Raw/NCI_ISBI/Mask/NCI-ISBI\ 2013\ Prostate\ Challenge\ -\ Test.zip -d ./Raw/NCI_ISBI/Mask/
 unzip ./Raw/NCI_ISBI/Mask/NCI-ISBI\ 2013\ Prostate\ Challenge\ -\ Leaderboard.zip -d ./Raw/NCI_ISBI/Mask/
 ```
-There is one case renaming which needs to be moved:
+There is one mask file needing renaming:
 
 ```
 mv ./Raw/NCI_ISBI/Mask/Training/ProstateDx-01-0006_correctedLabels.nrrd ./Raw/NCI_ISBI/Mask/Training/ProstateDx-01-0006.nrrd
@@ -163,7 +163,7 @@ Each client will be alternately assigned a GPU using `export CUDA_VISIBLE_DEVICE
 In this example, we run 4 clients on two GPUs, two clients for each GPU with 12 GB memory.
 
 ### 4.1 FedAvg 
-To run FL with [FedAvg]([FedAvg](https://arxiv.org/abs/1602.05629), we use
+To run FL with [FedAvg](https://arxiv.org/abs/1602.05629), we use
 ```
 ./run_poc.sh prostate_fedavg 1 "I2CVB MSD NCI_ISBI_3T NCI_ISBI_Dx"
 ```
