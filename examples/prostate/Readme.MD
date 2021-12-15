@@ -44,7 +44,7 @@ cd ./data_preparation
 ```
 
 From now on, for this section, we assume the current directory (`PWD`) to be `./data_preparation`.  
-We will download the three datasets to `./Raw/$dataset_id/`, store the client-specif datasets to `./dataset/$client_id`, and use dicom2nifti and pynrrd tools for data format conversion
+We will download the three datasets to `./Raw/$dataset_id/`, store the client-specif datasets to `./dataset/$client_id`, and use `dicom2nifti` and pynrrd tools for data format conversion
 
 ```
 mkdir Raw
@@ -68,7 +68,7 @@ cat ./Raw/I2CVB/siemens-3t* > ./Raw/I2CVB/siemens-3t.tar.gz
 tar xzvf ./Raw/I2CVB/siemens-3t.tar.gz -C ./Raw/I2CVB/
 ```
 
-This will produce two folders, `./Raw/I2CVB/GE` with 21 cases and `./Raw/I2CVB/Siemens` with 19 cases. Multi-sequence images and multi-region masks are stored individually in Dicom format. We use `dicom2nifti` tool to perform data format conversion to Nifti on T2 images and ground truth for the prostate region.
+This will produce two folders, `./Raw/I2CVB/GE` with 21 cases and `./Raw/I2CVB/Siemens` with 19 cases. Multi-sequence images and multi-region masks are stored individually in DICOM format. We use `dicom2nifti` tool to perform data format conversion to NIfTI on T2 images and ground truth for the prostate region.
 Due to the small data size, we combined the two into one client. Note that there is one case (Patient_428260) with a missing slice from ground truth segmentation. Thus, we discarded this case.
 
 ```
@@ -77,7 +77,7 @@ bash data_conversion_I2CVB.sh
 
 [**MSD**](http://medicaldecathlon.com/): [data link](https://drive.google.com/drive/folders/1HqEgzS8BV2c7xYNrZdEAnrHk7osJJ--2)
 
-Download "Task05_Prostate.tar" to ./Raw/MSD, and extract with
+Download "Task05_Prostate.tar" to `./Raw/I2CVB`, and extract with
 
 ```
 tar xf ./Raw/MSD/Task05_Prostate.tar -C ./Raw/MSD
@@ -91,19 +91,19 @@ bash data_conversion_MSD.sh
 
 [**NCI_ISBI**](https://wiki.cancerimagingarchive.net/display/Public/NCI-ISBI+2013+Challenge+-+Automated+Segmentation+of+Prostate+Structures): [data link](https://wiki.cancerimagingarchive.net/pages/viewpage.action?pageId=21267207)
 
-Download the first 3 .tcia files and download the actual image data with [NBIA Data Retriever](https://wiki.cancerimagingarchive.net/display/NBIA/Downloading+TCIA+Images), store them to ./Raw/NCI_ISBI/Image/Training(Test, Leaderboard). Then download the second 3 .zip files for ground truth segmentations and store them to ./Raw/NCI_ISBI/Mask, extract with  
+Download the first 3 .tcia files and download the actual DICOM image data with [NBIA Data Retriever](https://wiki.cancerimagingarchive.net/display/NBIA/Downloading+TCIA+Images), store them to `./Raw/NCI_ISBI/Image/Training(Test, Leaderboard)` as specified by their .tcia filename. Then download the second 3 .zip files containing the NRRD ground truth segmentations and store them to `./Raw/NCI_ISBI/Mask`, extract with  
 
 ```
 unzip ./Raw/NCI_ISBI/Mask/NCI-ISBI\ 2013\ Prostate\ Challenge\ -\ Training.zip -d ./Raw/NCI_ISBI/Mask/
 unzip ./Raw/NCI_ISBI/Mask/NCI-ISBI\ 2013\ Prostate\ Challenge\ -\ Test.zip -d ./Raw/NCI_ISBI/Mask/
 unzip ./Raw/NCI_ISBI/Mask/NCI-ISBI\ 2013\ Prostate\ Challenge\ -\ Leaderboard.zip -d ./Raw/NCI_ISBI/Mask/
 ```
-There is one mask file needing renaming:
+There is one case renaming which needs to be moved:
 
 ```
 mv ./Raw/NCI_ISBI/Mask/Training/ProstateDx-01-0006_correctedLabels.nrrd ./Raw/NCI_ISBI/Mask/Training/ProstateDx-01-0006.nrrd
 ```
-This dataset can be split into two clients, one for "Prostate-3T", and the other for "PROSTATE-DIAGNOSIS". Each has 30 training, 5 test, and 5 leaderboard image/label pairs. The images are T2 only, in Dicom format, and labels have two values in NRRD format. We convert `Dicom/nrrd` to Nifti, and combine the two label values.  
+This dataset can be split into two clients, one for "Prostate-3T", and the other for "PROSTATE-DIAGNOSIS". Each has 30 training, 5 test, and 5 leaderboard image/label pairs. The images are T2 only, in DICOM format, and labels have two values in NRRD format. We convert DICOM/NRRD to NIfTI, and combine the two label values.  
 Note that there is one case (ProstateDx-01-0055.nii.gz) with image/label mismatch. Thus, we discarded this case.
 
 ```
@@ -117,10 +117,32 @@ Now we have all data we need for this example under `./dataset` after data downl
 bash datalists_gen.sh
 bash merge_all_jsons.sh
 ```
+The expected output for these steps is:
+```
+Generate data split for ./dataset/I2CVB, with train:validation:test 8:2:0
+Save json to ./datalists/client_I2CVB.json
+In total 39 cases, 32 for training, 7 for validation, and 0 for testing
+Generate data split for ./dataset/MSD, with train:validation:test 8:2:0
+Save json to ./datalists/client_MSD.json
+In total 32 cases, 26 for training, 6 for validation, and 0 for testing
+Generate data split for ./dataset/NCI_ISBI_3T, with train:validation:test 8:2:0
+Save json to ./datalists/client_NCI_ISBI_3T.json
+In total 40 cases, 32 for training, 8 for validation, and 0 for testing
+Generate data split for ./dataset/NCI_ISBI_Dx, with train:validation:test 8:2:0
+Save json to ./datalists/client_NCI_ISBI_Dx.json
+In total 39 cases, 32 for training, 7 for validation, and 0 for testing
+```
+
 The resulting data lists will be stored in `./datalists`. Note that the ratio among training, validation, and testing can be adjusted.
 
 ## 3. Create your FL workspace 
-From now on, we assume the PWD to be ./prostate, one level higher than the previous section.
+From now on, we assume the PWD to be `./prostate`, one level higher than the previous section.
+
+If you haven't done so, run
+``
+cd ..
+``
+
 ### 3.1 POC ("proof of concept") workspace
 In this example, we run FL experiments in POC mode, starting with creating local FL workspace with
 
@@ -154,7 +176,7 @@ The [run_poc.sh](./run_poc.sh) script follows the pattern:
 ```
 ./run_poc.sh [config] [run] [client_ids]
 ```
-`[config]` is the app that will be used for the FL training, in this example, this includes prostate_fedavg, prostate_fedprox, and prostate_central.  
+`[config]` is the app that will be used for the FL training, in this example, this includes `prostate_fedavg`, `prostate_fedprox`, and prostate_central.  
 `[run]` is the run number for FL experiment. A unique run number will be needed for each experiment.  
 `[client_ids]` is the list of all candidate client IDs. In this experiment it is either "I2CVB MSD NCI_ISBI_3T NCI_ISBI_Dx" for 4-client experiment or "All" for centralized training.    
 
