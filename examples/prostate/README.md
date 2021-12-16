@@ -225,7 +225,7 @@ To simulate a centralized training baseline, we run FL with 1 client using all t
 After training, each client's best model will be used for cross-site validation. The results can be shown with
 for example
 ```
-  cat ./workspace_prostate/server/run_1/cross_val_results/cross_val.json
+cat ./workspace_prostate/server/run_1/cross_site_val/global_val.json
 ```
 
 ## 5. Results on 4 clients for Central vs. FedAvg vs. FedProx
