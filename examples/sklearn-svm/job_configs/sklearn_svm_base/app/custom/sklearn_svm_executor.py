@@ -44,15 +44,15 @@ class FedSKLearnSVMExecutor(Executor, ABC):
         self.global_model_path = global_model_path
         self.train_task_name = train_task_name
 
-        self.X_train = None
+        self.x_train = None
         self.y_train = None
-        self.X_valid = None
+        self.x_valid = None
         self.y_valid = None
         self.n_samples = None
 
-        self.local_support_X = None
+        self.local_support_x = None
         self.local_support_y = None
-        self.global_support_X = None
+        self.global_support_x = None
         self.global_support_y = None
 
     @abstractmethod
@@ -86,9 +86,9 @@ class FedSKLearnSVMExecutor(Executor, ABC):
 
         # load data, this is task/site-specific
         (
-            self.X_train,
+            self.x_train,
             self.y_train,
-            self.X_valid,
+            self.x_valid,
             self.y_valid,
             self.n_samples,
         ) = self.load_data()
@@ -97,10 +97,10 @@ class FedSKLearnSVMExecutor(Executor, ABC):
         # local validation with global center
         # fit a standalone SVM with the global support vectors
         svm_global = SVC(kernel="rbf")
-        svm_global.fit(self.global_support_X, self.global_support_y)
+        svm_global.fit(self.global_support_x, self.global_support_y)
         # save global model
         dump(svm_global, self.global_model_path)
-        y_pred = svm_global.predict(self.X_valid)
+        y_pred = svm_global.predict(self.x_valid)
         auc = roc_auc_score(self.y_valid, y_pred)
         self.log_info(
             fl_ctx,
@@ -113,11 +113,11 @@ class FedSKLearnSVMExecutor(Executor, ABC):
     def _local_training(self, fl_ctx: FLContext):
         # local training
         svm = SVC(kernel="rbf")
-        svm.fit(self.X_train, self.y_train)
+        svm.fit(self.x_train, self.y_train)
         # save local model
         dump(svm, self.local_model_path)
         index = svm.support_
-        self.local_support_X = self.X_train[index]
+        self.local_support_x = self.x_train[index]
         self.local_support_y = self.y_train[index]
 
     def train(
@@ -145,7 +145,7 @@ class FedSKLearnSVMExecutor(Executor, ABC):
             self._local_training(fl_ctx)
         else:
             # receive global model, validate it locally
-            self.global_support_X = global_param["support_X"]
+            self.global_support_x = global_param["support_x"]
             self.global_support_y = global_param["support_y"]
             self.log_info(
                 fl_ctx,
@@ -155,7 +155,7 @@ class FedSKLearnSVMExecutor(Executor, ABC):
             self._local_validation(fl_ctx, current_round)
 
         # report updated model in shareable
-        params = {"support_X": self.local_support_X, "support_y": self.local_support_y}
+        params = {"support_x": self.local_support_x, "support_y": self.local_support_y}
         dxo = DXO(data_kind=DataKind.WEIGHTS, data=params)
         self.log_info(fl_ctx, f"Local epochs finished. Returning shareable")
 
@@ -165,9 +165,9 @@ class FedSKLearnSVMExecutor(Executor, ABC):
 
     def finalize(self, fl_ctx: FLContext):
         # freeing resources in finalize
-        del self.X_train
+        del self.x_train
         del self.y_train
-        del self.X_valid
+        del self.x_valid
         del self.y_valid
         self.log_info(fl_ctx, "Freed training resources")
 

@@ -23,9 +23,9 @@ from sklearn.svm import SVC
 
 
 class _AccuItem(object):
-    def __init__(self, client, support_X, support_y):
+    def __init__(self, client, support_x, support_y):
         self.client = client
-        self.support_X = support_X
+        self.support_x = support_x
         self.support_y = support_y
 
 
@@ -91,7 +91,7 @@ class SKLearnSVMModelAggregator(Aggregator):
 
         if not self._client_in_accumulator(contributor_name):
             self.accumulator.append(
-                _AccuItem(contributor_name, data["support_X"], data["support_y"])
+                _AccuItem(contributor_name, data["support_x"], data["support_y"])
             )
             accepted = True
         else:
@@ -123,15 +123,15 @@ class SKLearnSVMModelAggregator(Aggregator):
 
         # Fist round, collect all support vectors and
         # perform one round of SVM to produce global model
-        support_X = []
+        support_x = []
         support_y = []
         for item in self.accumulator:
-            support_X.append(item.support_X)
+            support_x.append(item.support_x)
             support_y.append(item.support_y)
-        global_X = np.concatenate(support_X)
+        global_x = np.concatenate(support_x)
         global_y = np.concatenate(support_y)
         svm_global = SVC(kernel="rbf")
-        svm_global.fit(global_X, global_y)
+        svm_global.fit(global_x, global_y)
 
         # Reset accumulator for next round,
         # but not the center and count, which will be used as the starting point of the next round
@@ -139,11 +139,11 @@ class SKLearnSVMModelAggregator(Aggregator):
         self.log_debug(fl_ctx, "End aggregation")
 
         index = svm_global.support_
-        support_X = global_X[index]
+        support_x = global_x[index]
         support_y = global_y[index]
 
         dxo = DXO(
             data_kind=self.expected_data_kind,
-            data={"support_X": support_X, "support_y": support_y},
+            data={"support_x": support_x, "support_y": support_y},
         )
         return dxo.to_shareable()
