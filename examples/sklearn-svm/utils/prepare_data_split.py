@@ -74,7 +74,7 @@ def get_split_ratios(site_num: int, split_method: SplitMethod):
     elif split_method == SplitMethod.EXPONENTIAL:
         ratio_vec = np.exp(np.linspace(1, site_num, num=site_num))
     else:
-        raise ValueError("Split method not implemented!")
+        raise ValueError(f"Split method {split_method.name} not implemented!")
 
     return ratio_vec
 
@@ -95,17 +95,18 @@ def split_num_proportion(n, site_num, split_method: SplitMethod) -> List[int]:
 def assign_data_index_to_sites(data_size: int,
                                valid_fraction: float,
                                num_sites: int,
-                               site_name_prefix: str = "site-",
+                               site_name_prefix: str,
                                split_method: SplitMethod = SplitMethod.UNIFORM) -> dict:
     if valid_fraction == 1.0:
         raise ValueError("validation percent should be less than 100% of the total data")
 
-    valid_size = round(data_size * valid_fraction, 0)
+    valid_size = int(round(data_size * valid_fraction, 0))
+    print("valid size type", type(valid_size))
 
     train_size = data_size - valid_size
 
     site_sizes = split_num_proportion(train_size, num_sites, split_method)
-
+    print("site_sizes type", type(site_sizes))
     split_data_indices = {
         "valid": {"start": 0, "end": valid_size},
     }
@@ -113,6 +114,8 @@ def assign_data_index_to_sites(data_size: int,
         site_id = site_name_prefix + str(site + 1)
         idx_start = valid_size + sum(site_sizes[:site])
         idx_end = valid_size + sum(site_sizes[: site + 1])
+        print("start type=", type(idx_start))
+        print("end type=", type(idx_start))
         split_data_indices[site_id] = {"start": idx_start, "end": idx_end}
 
     return split_data_indices
@@ -194,7 +197,7 @@ def split_data(data_path: str,
                output_dir: str,
                site_num: int,
                valid_frac: float,
-               site_name_prefix: str = "site",
+               site_name_prefix: str = "site-",
                split_method: SplitMethod = SplitMethod.UNIFORM,
                store_method: StoreMethod = StoreMethod.STORE_INDEX,
                ):
