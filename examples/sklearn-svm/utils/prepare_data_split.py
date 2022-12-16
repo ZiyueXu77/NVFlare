@@ -99,7 +99,7 @@ def assign_data_index_to_sites(data_size: int,
                                split_method: SplitMethod = SplitMethod.UNIFORM) -> dict:
     if valid_fraction == 1.0:
         raise ValueError("validation percent should be less than 100% of the total data")
-
+    print("assign_data_index_to_sites")
     valid_size = int(round(data_size * valid_fraction, 0))
     print("valid size type", type(valid_size))
 
@@ -134,11 +134,12 @@ def get_file_line_count(input_path: str) -> int:
     return count
 
 
-def save_lines(fp, site_range: range, output_file: str):
-    lines = get_lines(fp, site_range)
-    with open(output_file, "w") as ofp:
-        for one_line in lines:
-            ofp.write(one_line)
+def save_lines(input_path, output_file: str, site_range: range):
+    with open(input_path, 'r') as fp:
+        lines = get_lines(fp, site_range)
+        with open(output_file, "w") as ofp:
+            for one_line in lines:
+                ofp.write(one_line)
 
 
 def save_indices(data_path: str,
@@ -163,15 +164,14 @@ def save_sites_data(input_path: str,
                     sites: list,
                     site_indices: dict,
                     output_file_format: str = "csv"):
-    with open(input_path, 'r') as fp:
-        if output_file_format == "csv":
-            for site in sites:
-                di = site_indices[site]
-                output_file = os.path.join(output_dir, f"data_{site}.csv")
-                site_range = range(di["start"], di["end"])
-                save_lines(fp, site_range, output_file)
-        else:
-            raise NotImplementedError
+    if output_file_format == "csv":
+        for site in sites:
+            di = site_indices[site]
+            output_file = os.path.join(output_dir, f"data_{site}.csv")
+            site_range = range(di["start"], di["end"])
+            save_lines(input_path, output_file, site_range)
+    else:
+        raise NotImplementedError
 
 
 def save_split_data(site_indices: dict,
@@ -216,6 +216,7 @@ def split_data(data_path: str,
                                               site_num,
                                               site_name_prefix,
                                               split_method)
+    print(site_indices)
     import pathlib
     file_format = get_file_format(pathlib.Path(data_path).suffix)
     file_format = file_format if not file_format else "csv"
