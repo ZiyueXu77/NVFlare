@@ -99,14 +99,11 @@ def assign_data_index_to_sites(data_size: int,
                                split_method: SplitMethod = SplitMethod.UNIFORM) -> dict:
     if valid_fraction == 1.0:
         raise ValueError("validation percent should be less than 100% of the total data")
-    print("assign_data_index_to_sites")
-    valid_size = int(round(data_size * valid_fraction, 0))
-    print("valid size type", type(valid_size))
 
+    valid_size = int(round(data_size * valid_fraction, 0))
     train_size = data_size - valid_size
 
     site_sizes = split_num_proportion(train_size, num_sites, split_method)
-    print("site_sizes type", type(site_sizes))
     split_data_indices = {
         "valid": {"start": 0, "end": valid_size},
     }
@@ -114,8 +111,6 @@ def assign_data_index_to_sites(data_size: int,
         site_id = site_name_prefix + str(site + 1)
         idx_start = valid_size + sum(site_sizes[:site])
         idx_end = valid_size + sum(site_sizes[: site + 1])
-        print("start type=", type(idx_start))
-        print("end type=", type(idx_start))
         split_data_indices[site_id] = {"start": idx_start, "end": idx_end}
 
     return split_data_indices
@@ -193,9 +188,9 @@ def save_split_data(site_indices: dict,
         raise NotImplementedError
 
 
-def get_file_format(ext: str) -> Optional[str]:
+def get_file_format(ext: str) -> str:
     if ext is None or ext == "" or ext.isspace():
-        return None
+        return "csv"
     elif ext.startswith("."):
         return ext[1:]
     else:
@@ -216,10 +211,9 @@ def split_data(data_path: str,
                                               site_num,
                                               site_name_prefix,
                                               split_method)
-    print(site_indices)
     import pathlib
     file_format = get_file_format(pathlib.Path(data_path).suffix)
-    file_format = file_format if not file_format else "csv"
+
     save_split_data(site_indices=site_indices,
                     input_path=data_path,
                     output_dir=output_dir,
