@@ -16,6 +16,7 @@ import argparse
 import json
 import os
 from enum import Enum
+from typing import List
 
 import numpy as np
 
@@ -78,7 +79,7 @@ def get_split_ratios(site_num: int, split_method: SplitMethod):
     return ratio_vec
 
 
-def split_num_proportion(n, site_num, split_method: SplitMethod) -> list[int]:
+def split_num_proportion(n, site_num, split_method: SplitMethod) -> List[int]:
     split = []
     ratio_vec = get_split_ratios(site_num, split_method)
     total = sum(ratio_vec)
@@ -106,67 +107,125 @@ def assign_data_index_to_sites(data_size: int,
     site_sizes = split_num_proportion(train_size, num_sites, split_method)
 
     split_data_indices = {
-        "data_index": {"valid": {"start": 0, "end": valid_size}},
+        "valid": {"start": 0, "end": valid_size},
     }
     for site in range(num_sites):
         site_id = site_name_prefix + str(site + 1)
         idx_start = valid_size + sum(site_sizes[:site])
         idx_end = valid_size + sum(site_sizes[: site + 1])
-        split_data_indices["data_index"][site_id] = {"start": idx_start, "end": idx_end}
+        split_data_indices[site_id] = {"start": idx_start, "end": idx_end}
 
     return split_data_indices
 
 
-def save_split_data(data_indices: dict,
+def get_lines(fp, r: range):
+    # read by line numbers
+    return [x for i, x in enumerate(fp) if i in r]
+
+
+def get_file_line_count(input_path: str) -> int:
+    count = 0
+    with open(input_path, "r") as fp:
+        for i, _ in enumerate(fp):
+            count += 1
+    return count
+
+
+def save_lines(fp, site_range: range, output_file: str):
+    lines = get_lines(fp, site_range)
+    with open(output_file, "w") as ofp:
+        for one_line in lines:
+            ofp.write(one_line)
+
+
+def save_indices(data_path: str,
+                 site_indices: dict,
+                 output_dir: str,
+                 filename: str = "data_split.json"):
+    json_data = {
+        "data_path": data_path,
+    }
+    json_data.update({"data_index": site_indices})
+
+    if not os.path.exists(output_dir):
+        os.makedirs(output_dir, exist_ok=True)
+
+    output_file = os.path.join(output_dir, filename)
+    with open(output_file, "w") as f:
+        json.dump(json_data, f, indent=4)
+
+
+def save_sites_data(input_path: str,
+                    output_dir: str,
+                    sites: list,
+                    site_indices: dict,
+                    output_file_format: str = "csv"):
+    with open(input_path, 'r') as fp:
+        if output_file_format == "csv":
+            for site in sites:
+                di = site_indices[site]
+                output_file = os.path.join(output_dir, f"data_{site}.csv")
+                site_range = range(di["start"], di["end"])
+                save_lines(fp, site_range, output_file)
+        else:
+            raise NotImplementedError
+
+
+def save_split_data(site_indices: dict,
+                    input_path: str,
                     output_dir: str,
                     store_method: StoreMethod = StoreMethod.STORE_DATA,
-                    file_forma="csv"):
+                    output_file_format="csv"):
     if os.path.exists(output_dir) and not os.path.isdir(output_dir):
         os.rmdir(output_dir)
     os.makedirs(output_dir, exist_ok=True)
 
-    sites = [x for x in data_indices["data_index"] if x != "valid"]
+    # sites and "valid"
+    index_keys = [x for x in site_indices]
     if store_method == StoreMethod.STORE_DATA:
-        if file_forma == "csv":
-            for site in sites:
-                output_file = os.path.join(output_dir, f"data_{site}.json")
-                with open(output_file, "w") as f:
-                     f.readline()
-        else:
-            raise  NotImplementedError
-    elif store_method == StoreMethod.STORE_DATA:
-        pass
+        save_sites_data(input_path, output_dir, index_keys, site_indices, output_file_format)
+    elif store_method == StoreMethod.STORE_INDEX:
+        save_indices(input_path, site_indices, output_dir)
     else:
         raise NotImplementedError
+
+
+def split_data(data_path: str,
+               output_dir: str,
+               site_num: int,
+               valid_frac: float,
+               site_name_prefix: str = "site",
+               split_method: SplitMethod = SplitMethod.UNIFORM,
+               store_method: StoreMethod = StoreMethod.STORE_INDEX,
+               ):
+    size_total = get_file_line_count(data_path)
+    site_indices = assign_data_index_to_sites(size_total,
+                                              valid_frac,
+                                              site_num,
+                                              site_name_prefix,
+                                              split_method)
+    save_split_data(site_indices=site_indices,
+                    input_path=data_path,
+                    output_dir=output_dir,
+                    store_method=store_method,
+                    output_file_format="csv"
+                    )
 
 
 def main():
     parser = data_split_args_parser()
     args = parser.parse_args()
 
-    json_data = {
-        "data_path": args.data_path,
-        "data_index": {"valid": {"start": 0, "end": args.size_valid}},
-    }
-
     valid_frac = args.size_valid / args.size_total
     split_method = SplitMethod(args.split_method)
 
-    r = assign_data_index_to_sites(args.size_total,
-                                   valid_frac,
-                                   args.site_num,
-                                   args.site_name_prefix,
-                                   split_method)
-    json_data.update(r)
-
-    if not os.path.exists(args.out_path):
-        os.makedirs(args.out_path, exist_ok=True)
-    for site in range(args.site_num):
-        output_file = os.path.join(
-            args.out_path, f"data_{args.site_name_prefix}{site + 1}.json"
-        )
-        with open(output_file, "w") as f:
-            json.dump(json_data, f, indent=4)
+    split_data(args.data_path,
+               args.out_path,
+               args.site_num,
+               valid_frac,
+               args.site_name_prefix,
+               split_method,
+               StoreMethod.STORE_INDEX)
 
 
 if __name__ == "__main__":

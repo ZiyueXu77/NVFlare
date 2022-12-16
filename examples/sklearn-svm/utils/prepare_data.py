@@ -71,7 +71,9 @@ def download_data(output_dir: str,
     os.makedirs(output_dir, exist_ok=True)
 
     # Save to csv file
-    filename = filename if not file_format else f"{dataset_name}.csv"
+    print("before", filename)
+    filename = filename if file_format else f"{dataset_name}.csv"
+    print("after", filename)
     if file_format == "csv":
         file_path = f"{output_dir}/{filename}"
 
