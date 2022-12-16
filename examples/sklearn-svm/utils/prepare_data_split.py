@@ -16,7 +16,7 @@ import argparse
 import json
 import os
 from enum import Enum
-from typing import List
+from typing import List, Optional
 
 import numpy as np
 
@@ -193,6 +193,15 @@ def save_split_data(site_indices: dict,
         raise NotImplementedError
 
 
+def get_file_format(ext: str) -> Optional[str]:
+    if ext is None or ext == "" or ext.isspace():
+        return None
+    elif ext.startswith("."):
+        return ext[1:]
+    else:
+        return ext
+
+
 def split_data(data_path: str,
                output_dir: str,
                site_num: int,
@@ -207,11 +216,14 @@ def split_data(data_path: str,
                                               site_num,
                                               site_name_prefix,
                                               split_method)
+    import pathlib
+    file_format = get_file_format(pathlib.Path(data_path).suffix)
+    file_format = file_format if not file_format else "csv"
     save_split_data(site_indices=site_indices,
                     input_path=data_path,
                     output_dir=output_dir,
                     store_method=store_method,
-                    output_file_format="csv"
+                    output_file_format=file_format
                     )
 
 
