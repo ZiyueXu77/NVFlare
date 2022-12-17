@@ -211,8 +211,9 @@ def split_data(data_path: str,
                                               site_num,
                                               site_name_prefix,
                                               split_method)
-    import pathlib
-    file_format = get_file_format(pathlib.Path(data_path).suffix)
+
+    from nvflare.app_common.utils.file_utils import get_file_format
+    file_format = get_file_format(data_path)
 
     save_split_data(site_indices=site_indices,
                     input_path=data_path,
