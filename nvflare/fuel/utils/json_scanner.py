@@ -95,7 +95,7 @@ class JsonScanner(object):
         try:
             node.processor.process_element(node)
         except BaseException as e:
-            if is_secure():
+            if not is_secure():
                 import traceback
                 print(traceback.format_exc())
 

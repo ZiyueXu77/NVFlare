@@ -37,6 +37,7 @@ from nvflare.private.fed.simulator.simulator_const import SimulatorConstants
 from nvflare.private.fed.utils.fed_utils import add_logfile_handler, fobs_initialize
 from nvflare.security.logging import secure_format_exception
 from nvflare.security.security import EmptyAuthorizer
+from nvflare.security.logging import secure_format_exception, is_secure
 
 
 class ClientTaskWorker(FLComponent):
@@ -132,8 +133,10 @@ class ClientTaskWorker(FLComponent):
                 time.sleep(interval)
 
         except BaseException as e:
-            import traceback
-            print(traceback.format_exc())
+            if not is_secure():
+                import traceback
+                print(traceback.format_exc())
+
             self.logger.error(f"ClientTaskWorker run error: {secure_format_exception(e)}")
         finally:
             if admin_agent:
