@@ -19,7 +19,7 @@ from sklearn.metrics import roc_auc_score
 from sklearn.svm import SVC
 
 from nvflare.apis.fl_context import FLContext
-from nvflare.app_opt.sklearn.scikit_learner import SKLearner
+from nvflare.app_opt.sklearn.sklearner import SKLearner
 
 
 class SVMLearner(SKLearner):

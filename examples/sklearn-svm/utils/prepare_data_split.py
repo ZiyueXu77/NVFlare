@@ -206,7 +206,7 @@ def split_data(data_path: str,
                valid_frac: float,
                site_name_prefix: str = "site-",
                split_method: SplitMethod = SplitMethod.UNIFORM,
-               store_method: StoreMethod = StoreMethod.STORE_INDEX,
+               store_method: StoreMethod = StoreMethod.STORE_DATA,
                ):
     size_total = get_file_line_count(data_path)
     site_indices = assign_data_index_to_sites(size_total,

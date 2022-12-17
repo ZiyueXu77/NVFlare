@@ -6,7 +6,7 @@
       "tasks": ["train"],
       "executor": {
         "id": "Executor",
-        "path": "svm_executor.SVMExecutor",
+        "path": "nvflare.app_opt.sklearn.svm.svm_executor.SVMExecutor",
         "args": {
           "learner_id": "svm_learner",
           "local_model_output_path": "/tmp/nvflare/sklearn/model/model.joblib"
