@@ -55,8 +55,6 @@ class SVMExecutor(Executor):
 
         if self.local_model_output_path:
             output_dir = os.path.dirname(self.local_model_output_path)
-            print("output_dir=", output_dir)
-            print("local_model_output_path=", self.local_model_output_path)
             os.makedirs(output_dir, exist_ok=True)
 
     def get_global_params(self, shareable: Shareable, fl_ctx: FLContext):
@@ -73,7 +71,6 @@ class SVMExecutor(Executor):
         (local_support_x, local_support_y, svm) = model["model"]
         params = {"support_x": local_support_x, "support_y": local_support_y}
 
-        print("DURING RAINING, ABOUT TO SAVE MODEL")
         self.save_model(svm, current_round)
 
         dxo = DXO(data_kind=DataKind.WEIGHTS, data=params)
@@ -150,7 +147,5 @@ class SVMExecutor(Executor):
             self.writer.flush()
 
     def save_model(self, model: any, current_round: int) -> None:
-        print("save_model")
         if self.local_model_output_path:
-            print("save_model")
             joblib.dump(model, self.local_model_output_path)

@@ -16,7 +16,7 @@ import copy
 from abc import ABC, abstractmethod
 
 from nvflare.fuel.common.excepts import ConfigError
-from nvflare.security.logging import secure_format_exception
+from nvflare.security.logging import secure_format_exception, is_secure
 
 
 class Node(object):
@@ -95,8 +95,9 @@ class JsonScanner(object):
         try:
             node.processor.process_element(node)
         except BaseException as e:
-            import traceback
-            print(traceback.format_exc())
+            if is_secure():
+                import traceback
+                print(traceback.format_exc())
 
             if self.location:
                 raise ConfigError(
