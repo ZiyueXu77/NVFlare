@@ -95,6 +95,9 @@ class JsonScanner(object):
         try:
             node.processor.process_element(node)
         except BaseException as e:
+            import traceback
+            print(traceback.format_exc())
+
             if self.location:
                 raise ConfigError(
                     "Error processing {} in JSON element {}: path: {}, exception: {}".format(

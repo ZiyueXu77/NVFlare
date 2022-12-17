@@ -156,22 +156,25 @@ def save_indices(data_path: str,
 
 def save_sites_data(input_path: str,
                     output_dir: str,
+                    filename: str,
                     sites: list,
                     site_indices: dict,
                     output_file_format: str = "csv"):
-    if output_file_format == "csv":
-        for site in sites:
-            di = site_indices[site]
-            output_file = os.path.join(output_dir, f"data_{site}.csv")
+    for site in sites:
+        di = site_indices[site]
+        output_file = os.path.join(output_dir, f"{site}/{filename}")
+        os.makedirs(os.path.dirname(output_file), exist_ok=True)
+        if output_file_format == "csv":
             site_range = range(di["start"], di["end"])
             save_lines(input_path, output_file, site_range)
-    else:
-        raise NotImplementedError
+        else:
+            raise NotImplementedError
 
 
 def save_split_data(site_indices: dict,
                     input_path: str,
                     output_dir: str,
+                    filename: str,
                     store_method: StoreMethod = StoreMethod.STORE_DATA,
                     output_file_format="csv"):
     if os.path.exists(output_dir) and not os.path.isdir(output_dir):
@@ -181,7 +184,7 @@ def save_split_data(site_indices: dict,
     # sites and "valid"
     index_keys = [x for x in site_indices]
     if store_method == StoreMethod.STORE_DATA:
-        save_sites_data(input_path, output_dir, index_keys, site_indices, output_file_format)
+        save_sites_data(input_path, output_dir, filename, index_keys, site_indices, output_file_format)
     elif store_method == StoreMethod.STORE_INDEX:
         save_indices(input_path, site_indices, output_dir)
     else:
@@ -214,10 +217,12 @@ def split_data(data_path: str,
 
     from nvflare.app_common.utils.file_utils import get_file_format
     file_format = get_file_format(data_path)
+    filename = os.path.basename(data_path)
 
     save_split_data(site_indices=site_indices,
                     input_path=data_path,
                     output_dir=output_dir,
+                    filename=filename,
                     store_method=store_method,
                     output_file_format=file_format
                     )

@@ -24,18 +24,25 @@ from nvflare.app_opt.sklearn.data_loader import load_data
 
 
 class SKLearner(FLComponent, ABC):
-    def __init__(self, train_data_path: str, valid_data_path: Optional[str] = None):
+    def __init__(self, root_data_path: str, filename: str):
         self.fl_ctx = None
-        self.train_data_path = train_data_path
-        self.valid_data_path = valid_data_path
+        self.root_data_path = root_data_path
+        self.filename = filename
         super().__init__()
 
     def initialize(self, fl_ctx: FLContext):
         self.fl_ctx = fl_ctx
 
+    def get_train_data_path(self) -> str:
+        site = self.fl_ctx.get_identity_name()
+        return f"{self.root_data_path}/{site}/{self.filename}"
+
+    def get_valid_data_path(self) -> str:
+        return f"{self.root_data_path}/valid/{self.filename}"
+
     def load_data(self) -> dict:
-        train_data = load_data(self.train_data_path)
-        valid_data = load_data(self.valid_data_path)
+        train_data = load_data(self.get_train_data_path())
+        valid_data = load_data(self.get_valid_data_path())
         return {"train": train_data, "valid": valid_data}
 
     def get_parameters(self, global_param: Optional[dict] = None) -> dict:
@@ -47,8 +54,5 @@ class SKLearner(FLComponent, ABC):
     def evaluate(self, curr_round: int, global_param: Optional[dict] = None) -> dict:
         pass
 
-    def log(self, curr_round: int, log_data: Optional[dict] = None) -> None:
-        pass
-
-    def save_model(self, curr_round: int, model: Optional[dict] = None) -> None:
+    def finalize(self) -> None:
         pass

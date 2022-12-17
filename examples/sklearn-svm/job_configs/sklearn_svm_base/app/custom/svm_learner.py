@@ -13,29 +13,25 @@
 # limitations under the License.
 
 # We will move to this app_common when it gets matured
-from abc import ABC
 from typing import Optional
 
 from sklearn.metrics import roc_auc_score
 from sklearn.svm import SVC
 
-import pandas as pd
-import numpy as np
-from nvflare.apis.fl_component import FLComponent
 from nvflare.apis.fl_context import FLContext
-from nvflare.app_opt.sklearn.data_loader import load_data
 from nvflare.app_opt.sklearn.scikit_learner import SKLearner
 
 
 class SVMLearner(SKLearner):
 
-    def __init__(self, train_data_path: str, valid_data_path: Optional[str] = None):
-        super().__init__(train_data_path, valid_data_path)
+    def __init__(self, root_data_path: str, filename: str):
+        super().__init__(root_data_path, filename)
         self.train_data = None
         self.valid_data = None
 
     def initialize(self, fl_ctx: FLContext):
         self.fl_ctx = fl_ctx
+
         data = self.load_data()
         self.train_data = data["train"]
         self.valid_data = data["valid"]
@@ -49,37 +45,37 @@ class SVMLearner(SKLearner):
             return {}
 
     def train(self, curr_round: int, global_param: Optional[dict] = None) -> dict:
-        # local training
         svm = SVC(kernel="rbf")
         (x_train, y_train, train_size) = self.train_data
         svm.fit(x_train, y_train)
-        # # save local model
-        # dump(svm, self.local_model_path)
         index = svm.support_
         local_support_x = x_train[index]
         local_support_y = y_train[index]
-        return {"model": (local_support_x, local_support_y)}
+        return {"model": (local_support_x, local_support_y, svm)}
 
     def evaluate(self, curr_round: int, global_param: Optional[dict] = None) -> dict:
         # local validation with global center
         # fit a standalone SVM with the global support vectors
         svm_global = SVC(kernel="rbf")
         global_model = self.get_parameters(global_param)
+        metrics = {}
         if "model" in global_model:
             (support_x, support_y) = global_model["model"]
             svm_global.fit(support_x, support_x)
-            # # save global model
-            # dump(svm_global, self.global_model_path)
             (x_valid, y_valid, valid_size) = self.valid_data
             y_pred = svm_global.predict(x_valid)
             auc = roc_auc_score(y_valid, y_pred)
+            metrics = {"AUC", auc}
 
-            # if self.writer:
-            #     # note: writing auc before current training step, for passed in global model
-            #     self.writer.add_scalar("AUC", auc, current_round)
-
-    def log(self, curr_round: int, log_data: Optional[dict] = None) -> None:
-        pass
+        return metrics
 
     def save_model(self, curr_round: int, model: Optional[dict] = None) -> None:
+        # # save global model
+        # dump(svm_global, self.global_model_path)
         pass
+
+    def finalize(self) -> None:
+        # freeing resources in finalize
+        del self.train_data
+        del self.valid_data
+        self.log_info(self.fl_ctx, "Freed training resources")

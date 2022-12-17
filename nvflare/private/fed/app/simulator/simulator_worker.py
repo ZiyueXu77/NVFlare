@@ -132,6 +132,8 @@ class ClientTaskWorker(FLComponent):
                 time.sleep(interval)
 
         except BaseException as e:
+            import traceback
+            print(traceback.format_exc())
             self.logger.error(f"ClientTaskWorker run error: {secure_format_exception(e)}")
         finally:
             if admin_agent:
