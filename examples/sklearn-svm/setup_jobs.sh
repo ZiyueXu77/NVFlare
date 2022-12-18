@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 
 # setup virtual env.
+# todo#
+# todo
 # todo
 
 # install dependency
