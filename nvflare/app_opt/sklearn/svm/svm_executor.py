@@ -16,6 +16,7 @@ from typing import Optional
 
 import joblib
 import tensorboard
+from svm_learner import SVMLearner
 
 from nvflare.apis.dxo import DXO, DataKind, from_shareable
 from nvflare.apis.event_type import EventType
@@ -26,15 +27,13 @@ from nvflare.apis.shareable import Shareable, make_reply
 from nvflare.apis.signal import Signal
 from nvflare.app_common.app_constant import AppConstants
 from nvflare.security.logging import secure_format_exception
-from svm_learner import SVMLearner
 
 
 class SVMExecutor(Executor):
     def __init__(
-            self,
-            learner_id: str,
-            local_model_output_path: str,
-
+        self,
+        learner_id: str,
+        local_model_output_path: str,
     ):
         super().__init__()
         self.client_id = None
@@ -74,9 +73,9 @@ class SVMExecutor(Executor):
         self.save_model(svm, current_round)
 
         dxo = DXO(data_kind=DataKind.WEIGHTS, data=params)
-        self._msg_log(f"Local epochs finished. Returning shareable")
+        self._msg_log("Local epochs finished. Returning shareable")
 
-        self.log_values(params)
+        self.log_values(params, current_round)
 
         return dxo.to_shareable()
 
@@ -87,7 +86,7 @@ class SVMExecutor(Executor):
         metrics = self.learner.evaluate(current_round, global_param)
         result = DXO(data_kind=DataKind.METRICS, data=metrics)
 
-        self.log_values(metrics)
+        self.log_values(metrics, current_round)
 
         return result.to_shareable()
 

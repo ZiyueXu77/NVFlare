@@ -16,8 +16,6 @@
 from abc import ABC
 from typing import Optional
 
-import pandas as pd
-import numpy as np
 from nvflare.apis.fl_component import FLComponent
 from nvflare.apis.fl_context import FLContext
 from nvflare.app_opt.sklearn.data_loader import load_data

@@ -14,13 +14,19 @@
 
 # We will move to this app_common when it gets matured
 from abc import ABC
-from typing import TypeVar, Dict
+from typing import Dict
 
 from nvflare.apis.fl_component import FLComponent
 from nvflare.apis.fl_context import FLContext
 
 
-class SKLearnAggregator(FLComponent, ABC):
+class Assembler(FLComponent, ABC):
+    """
+    Collector is special aggregator
+    Collector is responsible for the communication with clients and accept contributions
+    Collector delegate the aggregation to Assembler
+    """
+
     def __init__(self, data_kind: str):
         super().__init__()
         self.fl_ctx = None

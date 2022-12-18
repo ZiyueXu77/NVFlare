@@ -16,7 +16,7 @@ import argparse
 import json
 import os
 from enum import Enum
-from typing import List, Optional
+from typing import List
 
 import numpy as np
 
@@ -40,13 +40,11 @@ def data_split_args_parser():
     parser.add_argument(
         "--site_name_prefix", type=str, default="site-", help="Name prefix"
     )
-    parser.add_argument("--size_total", type=int, help="Total instance number")
     parser.add_argument(
-        "--size_valid",
-        type=int,
-        help="Validation size, the first N to be treated as validation data. "
-             "We allow size_valid = size_total, where all data will be used"
-             "for both training and validation. Should be used with caution.",
+        "--valid_frac",
+        type=float,
+        help="Validation fraction of the total size, N = round(total_size* valid_frac), "
+             "the first N to be treated as validation data. ",
     )
     parser.add_argument(
         "--split_method",
@@ -231,17 +229,25 @@ def split_data(data_path: str,
 def main():
     parser = data_split_args_parser()
     args = parser.parse_args()
-
-    valid_frac = args.size_valid / args.size_total
     split_method = SplitMethod(args.split_method)
 
+    # to generate a json index file
+    # split_data(args.data_path,
+    #            args.out_path,
+    #            args.site_num,
+    #            args.valid_frac,
+    #            args.site_name_prefix,
+    #            split_method,
+    #            StoreMethod.STORE_INDEX)
+
+    # to generate several data files
     split_data(args.data_path,
                args.out_path,
                args.site_num,
-               valid_frac,
+               args.valid_frac,
                args.site_name_prefix,
                split_method,
-               StoreMethod.STORE_INDEX)
+               StoreMethod.STORE_DATA)
 
 
 if __name__ == "__main__":

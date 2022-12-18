@@ -14,14 +14,15 @@
 
 # We will move to this app_common when it gets matured
 from typing import Dict
+
 import numpy as np
 from sklearn.svm import SVC
 
 from nvflare.apis.dxo import DataKind
-from nvflare.app_opt.sklearn.sklearn_aggegator import SKLearnAggregator
+from nvflare.app_common.aggregators.assembler import Assembler
 
 
-class SVMAggregator(SKLearnAggregator):
+class SVMAggregator(Assembler):
 
     def __init__(self):
         super().__init__(data_kind=DataKind.WEIGHTS)
@@ -53,4 +54,4 @@ class SVMAggregator(SKLearnAggregator):
     def reset(self) -> None:
         # Reset accumulator for next round,
         # # but not the center and count, which will be used as the starting point of the next round
-        self.accumulator = {}
+        super().accumulator = {}

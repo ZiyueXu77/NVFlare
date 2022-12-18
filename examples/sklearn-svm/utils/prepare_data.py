@@ -53,7 +53,6 @@ def download_data(output_dir: str,
     dataset = load_data(dataset_name)
     x = dataset.data
     y = dataset.target
-
     if randomize:
         np.random.seed(0)
         idx_random = np.random.permutation(len(y))
@@ -71,7 +70,7 @@ def download_data(output_dir: str,
     os.makedirs(output_dir, exist_ok=True)
 
     # Save to csv file
-    filename = filename if not file_format else f"{dataset_name}.csv"
+    filename = filename if filename else f"{dataset_name}.csv"
     if file_format == "csv":
         file_path = f"{output_dir}/{filename}"
 

@@ -1,0 +1,50 @@
+{
+  "format_version": 2,
+  "server": {
+    "heart_beat_timeout": 600,
+    "task_request_interval": 0.05
+  },
+  "task_data_filters": [],
+  "task_result_filters": [],
+  "components": [
+    {
+      "id": "persistor",
+      "path": "joblib_model_param_persistor.JoblibModelParamPersistor",
+      "args": {}
+    },
+    {
+      "id": "shareable_generator",
+      "name": "FullModelShareableGenerator",
+      "args": {}
+    },
+    {
+      "id": "collector",
+      "path": "nvflare.app_common.aggregators.collector.Collector",
+      "args": {
+        "assembler_id" : "svm_aggregator"
+      }
+    },
+    {
+      "id": "svm_aggregator",
+      "path": "svm_aggregator.SVMAggregator",
+      "args": {}
+    }
+  ],
+  "workflows": [
+    {
+      "id": "scatter_and_gather",
+      "name": "ScatterAndGather",
+      "args": {
+        "min_clients": 3,
+        "num_rounds": 2,
+        "start_round": 0,
+        "wait_time_after_min_received": 0,
+        "aggregator_id": "collector",
+        "persistor_id": "persistor",
+        "shareable_generator_id": "shareable_generator",
+        "train_task_name": "train",
+        "train_timeout": 0
+      }
+    }
+  ]
+}

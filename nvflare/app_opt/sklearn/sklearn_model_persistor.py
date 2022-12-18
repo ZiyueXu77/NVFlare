@@ -22,7 +22,6 @@ from nvflare.apis.fl_context import FLContext
 
 
 class SKLearnModelPersistor(FLComponent, ABC):
-
     def initialize(self, fl_ctx: FLContext):
         pass
 

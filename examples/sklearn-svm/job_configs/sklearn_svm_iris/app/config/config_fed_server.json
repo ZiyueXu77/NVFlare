@@ -19,9 +19,9 @@
     },
     {
       "id": "collector",
-      "path": "nvflare.app_opt.sklearn.sklearn_collector.SKLearnCollector",
+      "path": "nvflare.app_common.aggregators.collector.Collector",
       "args": {
-        "aggregator_id" : "svm_aggregator"
+        "assembler_id" : "svm_aggregator"
       }
     },
     {

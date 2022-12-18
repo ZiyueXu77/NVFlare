@@ -12,10 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import Optional
-
 import pandas as pd
-import numpy as np
 
 pd_readers = {
     "csv": pd.read_csv,
@@ -35,6 +32,7 @@ def _to_data_tuple(data):
 
 def get_pandas_reader(data_path: str):
     from nvflare.app_common.utils.file_utils import get_file_format
+
     file_format = get_file_format(data_path)
     reader = pd_readers.get(file_format, None)
     if reader is None:

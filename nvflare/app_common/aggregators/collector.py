@@ -1,25 +1,32 @@
-from typing import Optional, Dict
+from typing import Dict, Optional
 
-from nvflare.apis.dxo import DataKind, from_shareable, DXO
+from nvflare.apis.dxo import DXO, from_shareable
 from nvflare.apis.fl_constant import ReservedKey, ReturnCode
 from nvflare.apis.fl_context import FLContext
 from nvflare.apis.shareable import Shareable
 from nvflare.app_common.abstract.aggregator import Aggregator
+from nvflare.app_common.aggregators.assembler import Assembler
 from nvflare.app_common.app_constant import AppConstants
 
 
-class SKLearnCollector(Aggregator):
-    def __init__(self, aggregator_id: str):
+class Collector(Aggregator):
+    """
+    Collector is special aggregator
+    Collector is responsible for the communication with clients and accept contributions
+    Collector delegate the aggregation to Assembler
+    """
+
+    def __init__(self, assembler_id: str):
         super().__init__()
         self.accumulator: Optional[Dict] = None
-        self.aggregator_id = aggregator_id
-        self.aggregator = None
+        self.assembler_id = assembler_id
+        self.assembler: Optional[Assembler] = None
 
     def accept(self, shareable: Shareable, fl_ctx: FLContext) -> bool:
-        if not self.aggregator:
-            self.aggregator = fl_ctx.get_engine().get_component(self.aggregator_id)
+        if not self.assembler:
+            self.assembler = fl_ctx.get_engine().get_component(self.assembler_id)
         if not self.accumulator:
-            self.accumulator = self.aggregator.get_accumulator()
+            self.accumulator = self.assembler.get_accumulator()
 
         contributor_name = shareable.get_peer_prop(key=ReservedKey.IDENTITY_NAME, default="?")
         dxo = self._get_contribution(shareable, fl_ctx)
@@ -34,20 +41,16 @@ class SKLearnCollector(Aggregator):
     def _client_in_accumulator(self, client_name):
         return client_name in self.accumulator
 
-    def _accept_contribution(self,
-                             contributor: str,
-                             current_round: int,
-                             data: dict,
-                             fl_ctx: FLContext) -> bool:
+    def _accept_contribution(self, contributor: str, current_round: int, data: dict, fl_ctx: FLContext) -> bool:
 
         if not self._client_in_accumulator(contributor):
-            self.accumulator[contributor] = self.aggregator.get_model_params(data)
+            self.accumulator[contributor] = self.assembler.get_model_params(data)
             accepted = True
         else:
-            self.log_info(fl_ctx,
-                          f"Discarded: Current round: {current_round} " +
-                          f"contributions already include client: {contributor}",
-                          )
+            self.log_info(
+                fl_ctx,
+                f"Discarded: Current round: {current_round} " + f"contributions already include client: {contributor}",
+            )
             accepted = False
         return accepted
 
@@ -63,7 +66,7 @@ class SKLearnCollector(Aggregator):
         if rc and rc != ReturnCode.OK:
             self.log_warning(fl_ctx, f"Contributor {contributor_name} returned rc: {rc}. Disregarding contribution.")
             return None
-        expected_data_kind = self.aggregator.get_expected_data_kind()
+        expected_data_kind = self.assembler.get_expected_data_kind()
         if dxo.data_kind != expected_data_kind:
             self.log_error(fl_ctx, "expected {} but got {}".format(expected_data_kind, dxo.data_kind))
             return None
@@ -71,8 +74,11 @@ class SKLearnCollector(Aggregator):
         contribution_round = shareable.get_header(AppConstants.CONTRIBUTION_ROUND)
         current_round = fl_ctx.get_prop(AppConstants.CURRENT_ROUND)
         if contribution_round != current_round:
-            self.log_warning(fl_ctx, f"discarding DXO from {contributor_name} at round: "
-                                     f"{contribution_round}. Current round is: {current_round}")
+            self.log_warning(
+                fl_ctx,
+                f"discarding DXO from {contributor_name} at round: "
+                f"{contribution_round}. Current round is: {current_round}",
+            )
             return None
 
         return dxo
@@ -83,10 +89,10 @@ class SKLearnCollector(Aggregator):
         site_num = len(self.accumulator)
         self.log_info(fl_ctx, f"aggregating {site_num} update(s) at round {current_round}")
 
-        model = self.aggregator.aggregate(current_round, self.accumulator)
+        model = self.assembler.aggregate(current_round, self.accumulator)
         # Reset accumulator for next round,
-        self.aggregator.reset()
+        self.assembler.reset()
         self.log_debug(fl_ctx, "End aggregation")
 
-        dxo = DXO(data_kind=self.aggregator.get_expected_data_kind(), data=model)
+        dxo = DXO(data_kind=self.assembler.get_expected_data_kind(), data=model)
         return dxo.to_shareable()

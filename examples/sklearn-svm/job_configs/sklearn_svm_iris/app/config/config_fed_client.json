@@ -22,7 +22,8 @@
       "path": "svm_learner.SVMLearner",
       "args": {
         "root_data_path": "/tmp/nvflare/sklearn/data",
-        "filename": "iris.csv"      }
+        "filename": "iris.csv"
+      }
     }
   ]
 }
