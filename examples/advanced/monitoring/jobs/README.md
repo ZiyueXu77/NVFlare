@@ -150,7 +150,7 @@ To run the job from the command line, use the following command:
 
 ```bash
 # Generate job config folder
-python3 fedavg_script_runner_pt.py -j /tmp/nvflare/jobs/job_config
+python3 cifar10_sync_fedavg.py -j /tmp/nvflare/jobs/job_config
 
 # Submit the NVFlare job
 nvflare job submit -j /tmp/nvflare/jobs/job_config/hello-pt
