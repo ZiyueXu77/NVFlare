@@ -13,10 +13,10 @@
 # limitations under the License.
 
 from src.cifar10_nets import ModerateCNN
+from src.fedavg_advanced import FedAvgSync
 from src.utils.cifar10_data_splitter import Cifar10DataSplitter
 
 from nvflare.app_common.widgets.intime_model_selector import IntimeModelSelector
-from nvflare.app_common.workflows.fedavg import FedAvg
 from nvflare.app_opt.pt.job_config.model import PTModel
 from nvflare.job_config.api import FedJob
 from nvflare.job_config.script_runner import ScriptRunner
@@ -28,10 +28,10 @@ if __name__ == "__main__":
     train_idx_root = "/tmp/nvflare/dataset/cifar10_idx"
     train_script = "src/cifar10_fl.py"
 
-    job = FedJob(name="cifar10_sync_fedavg")
+    job = FedJob(name="cifar10_fedavg_sync")
 
     # Define the controller workflow and send to server
-    controller = FedAvg(
+    controller = FedAvgSync(
         num_clients=n_clients,
         num_rounds=num_rounds,
     )
@@ -49,5 +49,5 @@ if __name__ == "__main__":
     executor = ScriptRunner(script=train_script, script_args="")
     job.to_clients(executor)
 
-    job.export_job("./workspace/jobs")
-    job.simulator_run("./workspace/works", n_clients=n_clients, gpu="0")
+    job.export_job("/tmp/nvflare/workspace/jobs")
+    job.simulator_run("/tmp/nvflare/workspace/works", n_clients=n_clients, gpu="0")

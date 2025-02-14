@@ -149,7 +149,7 @@ def main():
 
         # Load global model params to local model
         model.load_state_dict(global_model.params)
-        model = model.to(device)
+        model = model.to(DEVICE)
 
         # wraps evaluation logic into a method to re-use for
         # evaluation on both trained and received model
@@ -158,7 +158,7 @@ def main():
             with torch.no_grad():
                 correct, total = 0, 0
                 for _i, (inputs, labels) in enumerate(valid_loader):
-                    inputs, labels = inputs.to(device), labels.to(device)
+                    inputs, labels = inputs.to(DEVICE), labels.to(DEVICE)
                     outputs = model(inputs)
                     _, pred_label = torch.max(outputs.data, 1)
 
@@ -181,7 +181,7 @@ def main():
             print(f"Local epoch {site_name}: {epoch + 1}/{epoch_local} (lr={lr})")
             avg_loss = 0.0
             for i, (inputs, labels) in enumerate(train_loader):
-                inputs, labels = inputs.to(device), labels.to(device)
+                inputs, labels = inputs.to(DEVICE), labels.to(DEVICE)
                 # zero the parameter gradients
                 optimizer.zero_grad()
                 # forward + backward + optimize
