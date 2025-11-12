@@ -1,0 +1,13 @@
+matplotlib
+torch
+torchvision
+kornia
+flwr-datasets[vision]
+transformers
+scikit-learn
+tensorboard
+transformers
+sentencepiece
+accelerate
+tqdm
+sentencepiece
