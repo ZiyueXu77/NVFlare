@@ -26,7 +26,10 @@ import torch.nn.functional as F
 from fedrevive import ModelState, TeacherState
 from model import StatTracker, create_model, get_model_diff, load_model_params, reset_model_state
 
+from nvflare.app_opt.pt.distillation.classification import mean_class_probabilities
+from nvflare.app_opt.pt.distillation.features import feature_statistics_loss
 from nvflare.app_opt.pt.distillation.losses import kl_divergence
+from nvflare.app_opt.pt.distillation.pool import SyntheticPool as TensorPool
 
 
 @dataclass(frozen=True)
@@ -110,24 +113,18 @@ class ClassProportionProxyEstimator:
         if count < self.num_uploads:
             load_model_params(self._model, uploaded_model, target_device=self.device)
             self._model.eval()
-            probability_sum = torch.zeros(10, device=self.device)
-            with torch.no_grad():
+
+            def probes():
                 for offset in range(0, self.batch_size, self.forward_batch_size):
                     chunk_size = min(self.forward_batch_size, self.batch_size - offset)
-                    # The logical probe batch may be large for sensitivity
-                    # experiments. Generate and forward it in bounded chunks
-                    # so peak device memory does not scale with probe count.
-                    probes = torch.randn(
-                        chunk_size,
-                        3,
-                        32,
-                        32,
-                        generator=self._probe_rng,
-                        device="cpu",
-                    ).to(self.device)
-                    logits = self._model(probes)
-                    probability_sum.add_(torch.softmax(logits / self.temperature, dim=1).sum(dim=0))
-            upload_proxy = (probability_sum / self.batch_size).cpu()
+                    yield torch.randn(chunk_size, 3, 32, 32, generator=self._probe_rng, device="cpu")
+
+            upload_proxy = mean_class_probabilities(
+                self._model,
+                probes(),
+                temperature=self.temperature,
+                device=self.device,
+            )
             self._proxy_sums[client_name] = (
                 self._proxy_sums.get(client_name, torch.zeros_like(upload_proxy)) + upload_proxy
             )
@@ -178,66 +175,54 @@ class DFKDGenerator(nn.Module):
 
 
 class SyntheticPool:
-    """Bounded in-memory synthetic set with class-aware sampling.
+    """Shared bounded tensor storage with the reference class-sampling RNG order.
 
-    Synthetic images are genuine FedRevive algorithm state, unlike completed
-    RPC payloads waiting only for sequence replay.  They remain resident for KD
-    sampling, but ``max_images`` caps their memory independently of run length.
-    The optional checkpoint is for observability/recovery and does not create a
-    second in-memory pool.
+    Keep one label draw per batch and one index draw per sample. Replacing this
+    sampler with the shared vectorized class sampler preserves the distribution,
+    but changes RNG draw order and therefore the reference experiment trajectory.
+    Augmentation remains in the research synthesis/KD loops.
     """
 
     def __init__(self, max_images: int, output_dir: str | None = None):
-        self.max_images = max_images
+        self.storage = TensorPool(max_images)
         self.output_dir = output_dir
-        self.images: list[torch.Tensor] = []
-        self.labels: list[int] = []
-        self.by_label = {label: [] for label in range(10)}
         self.additions = 0
 
     def __len__(self):
-        return len(self.images)
+        return len(self.storage)
 
-    def _reindex(self):
-        self.by_label = {label: [] for label in range(10)}
-        for index, label in enumerate(self.labels):
-            self.by_label[label].append(index)
-
-    def add(self, images: torch.Tensor, labels: torch.Tensor):
-        for image, label in zip(images.detach().cpu(), labels.detach().cpu()):
-            self.images.append(image.clone())
-            self.labels.append(int(label))
-        if len(self.images) > self.max_images:
-            excess = len(self.images) - self.max_images
-            del self.images[:excess]
-            del self.labels[:excess]
-        self._reindex()
+    def add(self, images, labels):
+        self.storage.add(images, labels)
         self.additions += 1
         if self.output_dir and self.additions % 100 == 1:
             os.makedirs(self.output_dir, exist_ok=True)
+            state = self.storage.state_dict()
             torch.save(
-                {"images": self.images, "labels": self.labels},
+                {"images": list(state["inputs"].unbind()), "labels": state["targets"].tolist()},
                 os.path.join(self.output_dir, "synthetic_dataset.pt"),
             )
 
-    def sample(self, distribution: torch.Tensor, batch_size: int):
-        if not self.images:
+    def sample(self, distribution, batch_size):
+        if not len(self):
             return None, None
         probabilities = distribution.detach().cpu().float()
         probabilities = probabilities / probabilities.sum()
-        requested_labels = torch.multinomial(probabilities, batch_size, replacement=True).tolist()
-        indices = []
-        for label in requested_labels:
-            candidates = self.by_label[label]
-            if candidates:
-                selected = candidates[torch.randint(len(candidates), (1,)).item()]
-            else:
-                selected = torch.randint(len(self.images), (1,)).item()
-            indices.append(selected)
-        return (
-            torch.stack([self.images[index] for index in indices]),
-            torch.tensor([self.labels[index] for index in indices], dtype=torch.long),
-        )
+
+        def indices(inputs, targets, count, generator):
+            labels = torch.multinomial(probabilities, count, replacement=True, generator=generator)
+            requested = labels.tolist()
+            by_label = {label: torch.nonzero(targets == label).flatten() for label in set(requested)}
+            selected = []
+            for label in requested:
+                candidates = by_label[label]
+                if len(candidates):
+                    index = candidates[torch.randint(len(candidates), (1,), generator=generator, device="cpu").item()]
+                else:
+                    index = torch.randint(len(inputs), (1,), generator=generator, device="cpu").item()
+                selected.append(int(index))
+            return torch.tensor(selected, dtype=torch.long, device="cpu")
+
+        return self.storage.sample(batch_size, sampler=indices)
 
 
 def _kldiv(student_logits, teacher_logits, temperature: float, reduction="batchmean"):
@@ -258,7 +243,7 @@ def _feature_loss(model: nn.Module, batch_features) -> torch.Tensor:
         raise ValueError(f"Expected {len(trackers)} feature-stat pairs, received {len(batch_features)}")
     loss = torch.zeros((), device=next(model.parameters()).device)
     for tracker, (mean, variance) in zip(trackers, batch_features):
-        loss = loss + (tracker.running_mean - mean).norm(2) + (tracker.running_var - variance).norm(2)
+        loss = loss + feature_statistics_loss([(mean, variance)], [(tracker.running_mean, tracker.running_var)])
     return loss
 
 

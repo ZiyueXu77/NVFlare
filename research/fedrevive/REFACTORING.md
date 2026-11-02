@@ -10,7 +10,7 @@ presets in the research application.
 | Branch | Contents | Review target |
 | --- | --- | --- |
 | `codex/fedrevive-dependencies` | Combined async and KD PR heads, without FedRevive edits | Dependency baseline only |
-| `codex/fedrevive` | FedRevive changes above that baseline | `codex/fedrevive-dependencies` until both PRs merge |
+| `codex/fedrevive` | FedRevive changes above that baseline | Compare against `codex/fedrevive-dependencies` until both PRs merge |
 
 Initial dependency baseline: `474c0e27608ebda5457b92ca58a25ce565c1cf92`.
 The baseline merges these commits without changing their source branches:
@@ -56,6 +56,11 @@ the dependency baseline before the feature branch. Compare FedRevive changes
 against the dependency branch; comparison against `main` also includes both
 pending PRs. These are deliberate update checkpoints, not automatic branch polling.
 
+These branches live in the contributor fork. Use its compare view or a fork-local
+draft PR for a focused intermediate review; NVIDIA's repository cannot use a
+fork-only dependency branch as its PR base. The final upstream PR targets NVIDIA
+`main` after the source PRs land.
+
 After both source PRs merge, transplant only the FedRevive changes onto current
 NVIDIA `main` and target the final PR there. This is necessary if the dependencies
 were squash-merged: simply merging `main` can leave their original commit history
@@ -99,9 +104,10 @@ pushing. Retain this migration record until the final review is complete.
 - [x] Combine the two pinned PR heads without changes to either dependency.
 - [x] Route ordinary student KD through the shared loss; retain synthesis KL
   with teacher-input gradients.
-- [ ] Compose the FedRevive update transformation and shared teacher history.
-- [ ] Migrate research synthesis/pool usage and phase scheduling.
-- [ ] Add actual-arrival composition and compare seeded end-to-end behavior.
+- [x] Compose the FedRevive update transformation and shared teacher history.
+- [x] Migrate research pool/probe/feature math and phase scheduling; retain the
+  task-specific synthesis and per-teacher KD loops where generic contracts differ.
+- [x] Add actual-arrival composition and compare small seeded runs.
 
 Preserve the reference `run_seed * 1_000_000 + assignment_id + 1` training seeds
 and NumPy `RandomState` scheduler draws. The generic example seed hash and
@@ -125,5 +131,57 @@ small classifier. Model deltas, generator state and loss metrics were bit-exact;
 synthesis retained teacher-input gradients and ordinary KD detached its teacher
 targets. This used PyTorch 2.15 and Kornia 0.9, without downloading a dataset.
 Full project style, explicit style checks on the changed research module, license
-headers and changed Markdown links pass. The phase-scheduler and complete
-teacher/synthesis migration remain unchecked above.
+headers and changed Markdown links pass.
+
+## Stage 4 composition
+
+`FedReviveUpdate` attaches to the core coordinator in both arrival modes.
+It inserts each arriving teacher before revival, refreshes retained client
+proxies, preserves the version-50/version-100 gates, and blends the exact-base
+client delta with the current-global KD delta. `FedAvgUpdate` preserves the
+same-base-per-buffer check when users override method presets.
+
+`FedReviveWorkflow` reuses `AsyncWorkflow` calls and lifecycle. Its phase scheduler
+retains the reference `RandomState`, heap tie rule, logical release point and
+linear training seeds. Research reservations retain speculative assignments near
+the horizon, as the reference did. `TensorStore` retains bases/results and all
+publications on disk without reference counting or reclamation. The former
+`--no-in-time` inspection path is rejected; raw result files serve inspection.
+
+The shared `TeacherBuffer`, `SyntheticPool`, ordinary KD loss, feature-statistics
+math and mean-probability probe are used directly. The research class sampler
+preserves the original RNG draws, including absent-class fallback. Generic
+`DataFreeSynthesizer` fixes a latent batch and optimizes generator parameters;
+FedRevive also optimizes latent/embedding tensors and meta-updates a persistent
+generator. Generic `DistillationTrainer` evaluates teachers on the same batch;
+FedRevive samples/augments a separate batch per teacher before one optimizer
+step. Those research loops intentionally remain explicit.
+
+Validation includes all three method schedules through 110 small-model
+publications and a time-horizon cutoff, with one/two workers. Assignment identity,
+logical identity, bases, timestamps, seeds and final parameters match the
+pre-migration implementation exactly. A two-teacher synthesis/KD comparison
+matches model deltas, generator state and losses exactly; pool samples/RNG
+continuation and two-upload probe freezing match exactly. The shared feature
+helper groups each layer's mean/variance terms before summation: one ResNet CPU
+comparison changes the scalar from 299.679016 to 299.679047 with identical input
+gradients. This floating-point reduction change is explicit; complete CIFAR
+trajectories are not claimed bit-identical.
+
+Dataset-free jobs through the real Collab simulator complete in both modes.
+The one/two-worker phase runs have identical accepted IDs/bases/seeds and final
+model SHA-256 `cf700754f7729a6aeb6dac0eac7c50b9f9ff7f151e9bc92ac7017b7bdf889ff4`.
+All six method/mode server configurations reconstruct from isolated exports.
+Only three focused research unit cases are added; full dataset accuracy,
+CUDA execution and distributed workflow recovery remain outside this validation.
+
+The combined focused suite has 39 cases; the affected Collab/catalog/KD/research
+and documentation-link suite has 295 passing cases. Full project style, explicit
+research style, license headers and unit-test timing contracts pass. Fresh
+independent review against the dependency baseline reports zero findings and
+independently reruns the reference schedule and DFKD comparisons.
+
+Failure handling now follows the core fail-fast contract: physical RPC errors
+are surfaced when received, including during horizon draining. The old harness
+could defer an error until its logical upload event or discard it at shutdown.
+No retry or distributed recovery is introduced.

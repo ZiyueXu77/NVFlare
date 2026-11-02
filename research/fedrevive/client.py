@@ -69,6 +69,7 @@ class FedReviveClient:
         device: str | None = "cpu",
         num_threads: int = 1,
         num_workers: int = 0,
+        run_seed: int = 10,
     ):
         self.data_root = data_root
         self.prepared_data_root = prepared_data_root
@@ -78,6 +79,7 @@ class FedReviveClient:
         self.device = device
         self.num_threads = num_threads
         self.num_workers = num_workers
+        self.run_seed = run_seed
         self.logger = get_obj_logger(self)
         self._dataset = None
         self._model = None
@@ -140,7 +142,7 @@ class FedReviveClient:
         model_version: int,
         global_model: dict[str, torch.Tensor],
         logical_assignments: dict[str, str],
-        train_seeds: dict[str, int],
+        train_seeds: dict[str, int] | None = None,
     ):
         if collab.is_aborted:
             return None
@@ -153,7 +155,17 @@ class FedReviveClient:
         physical_name = collab.site_name
         logical_name = logical_assignments[physical_name]
         assignment_id = int(assignment_ids[physical_name])
-        train_seed = int(train_seeds[physical_name])
+        shard_name = logical_name
+        if train_seeds is None:
+            # Actual-arrival AsyncRecipe uses site identities directly. Map
+            # conventional simulator sites to persistent prepared shard names.
+            if logical_name.startswith("site-"):
+                shard_name = f"client-{int(logical_name.split('-', 1)[1]) - 1}"
+            elif not logical_name.startswith("client-"):
+                raise ValueError("Use site-N or client-N site names with prepared CIFAR shards")
+            train_seed = self.run_seed * 1_000_000 + assignment_id + 1
+        else:
+            train_seed = int(train_seeds[physical_name])
         torch.manual_seed(train_seed)
 
         device = self._device()
@@ -161,7 +173,7 @@ class FedReviveClient:
         model = load_model_params(self._model, global_model, target_device=device)
         optimizer = torch.optim.Adam(model.parameters(), lr=self.local_lr)
         criterion = nn.CrossEntropyLoss()
-        loader = self._loader(logical_name, train_seed)
+        loader = self._loader(shard_name, train_seed)
         iterator = iter(loader)
 
         model.train()
@@ -202,6 +214,7 @@ class FedReviveClient:
             "model_version": int(model_version),
             "logical_name": logical_name,
             "train_seed": train_seed,
+            "shard_name": shard_name,
         }
         self.logger.info(
             f"[{collab.call_info}] assignment={assignment_id} logical={logical_name} "

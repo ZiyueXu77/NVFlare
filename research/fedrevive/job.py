@@ -34,9 +34,11 @@ for _variable in (
 from client import FedReviveClient
 from data import DELAY_SCHEDULES, load_manifest, prepare_cifar10
 from fedrevive import FIGURE_2_METHOD_CONFIGS, ClassProportionSource, Method
-from server import FedReviveServer
+from server import FedReviveApplication, FedReviveModelAdapter
+from update import FedAvgUpdate, FedReviveUpdate
+from workflow import FedReviveRecipe
 
-from nvflare.collab import CollabRecipe
+from nvflare.collab import AsyncRecipe
 from nvflare.recipe import SimEnv
 
 PROJECT_DIR = Path(__file__).resolve().parent
@@ -44,6 +46,12 @@ PROJECT_DIR = Path(__file__).resolve().parent
 
 def define_parser():
     parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--arrival-mode",
+        choices=("simulated", "actual"),
+        default="simulated",
+        help="Seeded paper phases or actual-arrival AsyncRecipe",
+    )
     parser.add_argument(
         "--method",
         choices=[method.value for method in Method],
@@ -111,7 +119,7 @@ def define_parser():
         "--in-time",
         action=argparse.BooleanOptionalAction,
         default=True,
-        help="Accumulate accepted deltas in place; --no-in-time retains all B deltas (higher memory)",
+        help="Compatibility flag; shared async aggregation always accumulates in time",
     )
     parser.add_argument("--call-timeout", type=float, default=3600.0)
     parser.add_argument("--server-device", choices=("auto", "cpu", "cuda"), default="auto")
@@ -137,6 +145,8 @@ def _device(value: str):
 
 
 def validate_args(args):
+    if not args.in_time:
+        raise ValueError("The shared async coordinator uses bounded in-time accumulation; remove --no-in-time")
     if args.num_clients < 1 or args.num_logical_clients < 1:
         raise ValueError("--num-clients and --num-logical-clients must be >= 1")
     if args.max_time <= 0 or args.local_iterations < 1 or args.local_batch_size < 1:
@@ -154,6 +164,7 @@ def validate_args(args):
 
 
 def make_recipe(args):
+    validate_args(args)
     method = Method(args.method)
     preset = FIGURE_2_METHOD_CONFIGS[method]
     active_jobs = preset.num_active_jobs if args.num_active_jobs is None else args.num_active_jobs
@@ -174,27 +185,47 @@ def make_recipe(args):
     if buffer_size < 1 or not 1 <= open_slots <= active_jobs:
         raise ValueError("B must be positive and O must be between 1 and K")
 
-    server = FedReviveServer(
-        method=method,
-        data_root=args.data_root,
-        prepared_data_root=args.prepared_data_root,
-        max_time=args.max_time,
+    if args.arrival_mode == "actual" and (
+        active_jobs > args.num_clients or args.num_clients > args.num_logical_clients
+    ):
+        raise ValueError("Actual arrivals require K <= physical clients <= prepared logical clients")
+    server_lr = preset.server_lr if args.server_lr is None else args.server_lr
+    if server_lr <= 0 or args.max_model_versions < 1:
+        raise ValueError("server_lr and max_model_versions must be positive")
+    config = vars(args).copy()
+    config.update(
         num_active_jobs=active_jobs,
         buffer_size=buffer_size,
         min_open_slots=open_slots,
-        server_lr=args.server_lr,
-        call_timeout=args.call_timeout,
-        device=_device(args.server_device),
-        eval_batch_size=args.eval_batch_size,
-        eval_interval=args.eval_interval,
-        in_time=args.in_time,
-        setup_seed=args.setup_seed,
-        run_seed=args.run_seed,
-        max_model_versions=args.max_model_versions,
+        server_lr=server_lr,
         class_proportion_source=class_proportion_source,
         generation_interval=generation_interval,
-        class_proportion_probe_count=args.class_proportion_probe_count,
     )
+    application = FedReviveApplication(
+        data_root=args.data_root,
+        prepared_data_root=args.prepared_data_root,
+        run_config=config,
+        device=_device(args.server_device),
+        eval_batch_size=args.eval_batch_size,
+        eval_interval=(1 if method is Method.FEDAVG else 10) if args.eval_interval is None else args.eval_interval,
+        setup_seed=args.setup_seed,
+        run_seed=args.run_seed,
+        max_time=args.max_time,
+    )
+    transform = (
+        FedReviveUpdate(
+            args.prepared_data_root,
+            device=_device(args.server_device),
+            generation_interval=generation_interval,
+            class_proportion_source=class_proportion_source,
+            probe_count=args.class_proportion_probe_count,
+            run_seed=args.run_seed,
+        )
+        if method is Method.FEDREVIVE
+        else None
+    )
+    if method is Method.FEDAVG:
+        transform = FedAvgUpdate(buffer_size)
     client = FedReviveClient(
         data_root=args.data_root,
         prepared_data_root=args.prepared_data_root,
@@ -203,6 +234,7 @@ def make_recipe(args):
         local_lr=args.local_lr,
         device=_device(args.client_device),
         num_workers=args.num_workers,
+        run_seed=args.run_seed,
     )
     # SimEnv creates one process per physical site.  Physical sites are only a
     # bounded execution pool and are deliberately independent of logical K.
@@ -212,9 +244,18 @@ def make_recipe(args):
     # server-side event scheduler still reproduces all 100 logical jobs.
     server_call_threads = max(8, 2 * args.num_clients)
     client_call_threads = 4
-    recipe = CollabRecipe(
+    recipe_class = AsyncRecipe if args.arrival_mode == "actual" else FedReviveRecipe
+    recipe = recipe_class(
         job_name=f"fedrevive_{method.value}",
-        server=server,
+        application=application,
+        model_adapter=FedReviveModelAdapter(),
+        num_updates=args.max_model_versions,
+        num_active_jobs=active_jobs,
+        buffer_size=buffer_size,
+        min_open_slots=open_slots,
+        server_lr=server_lr,
+        update_transform=transform,
+        call_timeout=args.call_timeout,
         client=client,
         min_clients=args.num_clients,
         sync_task_timeout=600,
@@ -225,7 +266,16 @@ def make_recipe(args):
     recipe.set_client_prop("prepared_data_root", args.prepared_data_root)
     for filename in ("model.py", "data.py"):
         recipe.add_client_file(str(PROJECT_DIR / filename))
-    for filename in ("model.py", "data.py", "fedrevive.py", "dfkd.py"):
+    for filename in (
+        "model.py",
+        "data.py",
+        "fedrevive.py",
+        "dfkd.py",
+        "update.py",
+        "schedule.py",
+        "storage.py",
+        "workflow.py",
+    ):
         recipe.add_server_file(str(PROJECT_DIR / filename))
     return recipe, (active_jobs, buffer_size, open_slots)
 
@@ -262,11 +312,14 @@ def main():
     print(f"  Logical clients: {args.num_logical_clients}")
     print(f"  K/B/O: {active_jobs}/{buffer_size}/{open_slots}")
     print(f"  In-time accumulation: {args.in_time}")
-    print(f"  Simulated-time budget: {args.max_time}")
-    print(f"  Delay schedule: {args.delay_schedule}")
-    print(f"  Class-proportion source: {recipe.server.class_proportion_source.value}")
+    if args.arrival_mode == "simulated":
+        print(f"  Simulated-time budget: {args.max_time}")
+        print(f"  Delay schedule: {args.delay_schedule}")
+    print(f"  Global-version budget: {args.max_model_versions}")
+    print(f"  Arrival mode: {args.arrival_mode}")
+    print(f"  Class-proportion source: {recipe.server.application.run_config['class_proportion_source']}")
     print(f"  Class-proportion probe count: {args.class_proportion_probe_count}")
-    print(f"  Generation interval: {recipe.server.generation_interval}")
+    print(f"  Generation interval: {recipe.server.application.run_config['generation_interval']}")
     print("=" * 80)
     run = recipe.execute(SimEnv(num_clients=args.num_clients, workspace_root=args.workspace_root))
     print("Job Status:", run.get_status())
