@@ -26,6 +26,8 @@ import torch.nn.functional as F
 from fedrevive import ModelState, TeacherState
 from model import StatTracker, create_model, get_model_diff, load_model_params, reset_model_state
 
+from nvflare.app_opt.pt.distillation.losses import kl_divergence
+
 
 @dataclass(frozen=True)
 class DFKDConfig:
@@ -239,6 +241,12 @@ class SyntheticPool:
 
 
 def _kldiv(student_logits, teacher_logits, temperature: float, reduction="batchmean"):
+    """Synthesis KL: retain teacher-input gradients through frozen models.
+
+    Ordinary student training uses the shared detached-target KD loss below.
+    Synthesis optimizes inputs, so replacing this function with that loss would
+    silently remove the teacher's contribution to the input gradient.
+    """
     student = F.log_softmax(student_logits / temperature, dim=1)
     teacher = F.softmax(teacher_logits / temperature, dim=1)
     return F.kl_div(student, teacher, reduction=reduction) * temperature**2
@@ -444,7 +452,7 @@ class DFKDReviver:
                     student_output = self.student_model(images.detach())
                     with torch.no_grad():
                         teacher_output = teacher(images)
-                    loss = loss + _kldiv(
+                    loss = loss + kl_divergence(
                         student_output,
                         teacher_output,
                         self.config.temperature,

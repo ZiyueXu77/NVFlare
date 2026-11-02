@@ -4,6 +4,9 @@ This research project implements [FedRevive](https://arxiv.org/abs/2511.00655)
 with the NVIDIA FLARE Collab API. It targets the CIFAR-10 experiment in the
 paper and provides FedAvg, FedBuff, and FedRevive through one workflow.
 
+The ongoing component migration, pinned dependency PRs, branch-update procedure,
+and numerical preservation checks are tracked in [REFACTORING.md](REFACTORING.md).
+
 FedRevive retains the ordinary parameter-space update from an asynchronous
 client and supplements stale updates with server-side data-free knowledge
 distillation (DFKD). Recent returned client models act as teachers, a
