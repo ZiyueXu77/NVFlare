@@ -48,10 +48,14 @@ import json
 import os
 
 import numpy as np
-from data.cifar10_data_utils import SPLIT_ROOT, get_site_class_summary, load_cifar10_data
+
+if __package__:
+    from .data.cifar10_data_utils import SPLIT_ROOT, get_site_class_summary, load_cifar10_data
+else:
+    from data.cifar10_data_utils import SPLIT_ROOT, get_site_class_summary, load_cifar10_data
 
 
-def partition_data(num_sites, alpha, seed):
+def partition_data(num_sites, alpha, seed, train_label=None):
     """
     Partition CIFAR-10 data using Dirichlet sampling.
 
@@ -59,6 +63,8 @@ def partition_data(num_sites, alpha, seed):
         num_sites: Number of sites to partition data into
         alpha: Dirichlet distribution parameter (controls heterogeneity)
         seed: Random seed for reproducibility
+        train_label: Optional training labels; returned indices address this array.
+            Supplying labels allows callers to reserve proxy data before splitting.
 
     Returns:
         site_idx: Dictionary mapping site index to list of data indices
@@ -66,7 +72,9 @@ def partition_data(num_sites, alpha, seed):
     """
     np.random.seed(seed)
 
-    train_label = load_cifar10_data()
+    train_label = load_cifar10_data() if train_label is None else np.asarray(train_label)
+    if num_sites < 1 or alpha <= 0 or not np.isfinite(alpha) or len(train_label) < 10 * num_sites:
+        raise ValueError("num_sites and alpha must be positive, with at least ten training samples per site")
 
     min_size = 0
     K = 10  # Number of classes in CIFAR-10

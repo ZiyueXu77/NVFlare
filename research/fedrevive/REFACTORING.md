@@ -1,6 +1,7 @@
 # FedRevive component migration
 
-This work implements Stage 4 of [the FedRevive roadmap](https://github.com/NVIDIA/NVFlare/issues/5572).
+This work covers Stage 4 and the first Stage 5 consumer in
+[the FedRevive roadmap](https://github.com/NVIDIA/NVFlare/issues/5572).
 The async and KD backbones remain independent. This branch composes them and
 keeps CIFAR architecture, augmentation, experimental schedules and algorithm
 presets in the research application.
@@ -95,9 +96,10 @@ pushing. Retain this migration record until the final review is complete.
    reusing `AsyncTrainingCoordinator`, Collab calls and disk-first artifacts.
    Preserve logical-client release after training, before upload, and the
    simulated-time cutoff. Fixed-order replay alone does not implement this policy.
-5. **Qualification and ablations.** Compare fixed updates and a small seeded run,
-   validate export and one/two-worker equivalence, then demonstrate component
-   omission/replacement. Record intentional numerical changes explicitly.
+5. **Independent reuse and qualification.** Compare fixed updates and a small
+   seeded run, validate export and one/two-worker equivalence, then demonstrate
+   the async and KD backbones in consumers outside FedRevive. Record intentional
+   numerical changes explicitly.
 
 ## Preservation checks and current progress
 
@@ -185,3 +187,39 @@ Failure handling now follows the core fail-fast contract: physical RPC errors
 are surfaced when received, including during horizon draining. The old harness
 could defer an error until its logical upload event or discard it at shutdown.
 No retry or distributed recovery is introduced.
+
+## Stage 5: independent consumers
+
+Stage 4 is stable for the tested seeded simulated-arrival configuration. The
+subsequent bounded real-data CUDA comparison recorded in
+[the roadmap](https://github.com/NVIDIA/NVFlare/issues/5572) covers 250
+publications through synthesis/KD warmup, with aligned curves and accepted
+schedules. It does not establish full paper-length or multi-seed equivalence.
+
+Stage 5 demonstrates reusable components in other applications:
+
+- The existing [async CIFAR-10 example](../../examples/advanced/collab/pt_async_cifar10/README.md)
+  already supplies the independent FedBuff consumer (`AsyncRecipe`, K=8/B=4/O=1).
+- The new [synchronous CIFAR-10 KD example](../../examples/advanced/collab/pt_cifar10/fedkd/README.md)
+  imports `DistillationTrainer` and `kl_divergence` into ordinary `CollabRecipe`
+  rounds. It reuses the FedAvg client and compares weight averaging with KD on
+  identical private shards. A server proxy subset is reserved before client
+  partitioning; the official test set is evaluation-only. Neither async nor
+  FedRevive is required by that consumer.
+
+Start with supplied proxy batches and the same model architecture. Optional
+synthetic-batch consumers and broader execution/accuracy qualification can
+follow. FedRevive ablation controls are not the acceptance criterion for this
+stage. Keep task-specific preparation, models and defaults in examples, and add
+shared helper behavior only when an independent consumer needs it.
+
+The first KD consumer adds two focused tests: complete, disjoint and repeatable
+proxy/client partitions; and KD that improves teacher agreement without
+averaging parameters or mutating teachers. The 297-case affected suite passes.
+Both aggregation modes complete two rounds through the real Collab simulator
+using small synthetic CIFAR-shaped data, with identical initial models. Both
+exported configurations reconstruct and aggregate in isolated interpreters
+against a freshly built/installed NVFlare wheel, without source-checkout or
+FedRevive imports. Project style, license and documentation-link checks pass.
+These checks establish execution and reuse, not real-data accuracy improvement;
+the heterogeneous CIFAR-10 comparison remains to be run.
