@@ -116,6 +116,45 @@ The server run directory contains:
 These model artifacts support comparison and inference. They do not restore
 client optimizer/loader state or resume a distributed experiment.
 
+## FedDF reference validation
+
+The following experiment validates the same standalone `DistillationTrainer`
+using a separate FedDF composition: initialize the student from averaged
+current-round client parameters, distill the mean teacher logits with KL loss,
+and broadcast the fused student in the next round. The default example above
+uses its own illustrative aggregation rule and training configuration.
+
+![FedAvg and FedDF test accuracy over rounds 0–100](figures/fedavg_vs_feddf_0_100.png)
+
+| Method | Round 100 test accuracy | Best test accuracy in rounds 0–100 |
+| --- | ---: | ---: |
+| FedAvg | 39.88% | 51.74% |
+| FedDF | 69.28% | 71.87% |
+
+This single-seed run uses the original FP32 ResNet-8-BN (78,042 parameters),
+CIFAR-10 with Dirichlet alpha 0.1, 16 of 20 clients per round, and 40 local epochs.
+The private/validation split contains 45,000/5,000 training images; evaluation
+uses the official 10,000-image test set. Local SGD uses batch size 64, constant
+learning rate 0.1, no momentum, and no weight decay. FedDF additionally uses
+50,000 unlabeled CIFAR-100 training images as proxy inputs. Its server uses
+Adam at 0.001, temperature-1 KL, and validation-based stopping and checkpoint
+selection. Parameter averaging, BatchNorm buffers and mode-specific client
+sampling follow the
+[released FedDF code](https://github.com/epfml/federated-learning-public-code/tree/44dd5551071969eb354ee2ed091a9ba36c1d5b08/codes/FedDF-code).
+
+Neither curve reaches the 75% target within these 100 rounds. The
+[paper's Table 1](https://proceedings.neurips.cc/paper/2020/file/18df51b97ccd68128e994804f3eccc87-Paper.pdf)
+uses tuned local learning rates whose selected value for this setting is not
+specified in the release; this run uses the README's 0.1. These measured curves
+demonstrate the component's iterative FedDF composition and do not establish
+the paper's reported target-round counts or three-seed statistics.
+
+The [per-round data](figures/fedavg_vs_feddf_0_100.csv) and
+[run configuration and qualifications](figures/feddf_reference_run.json)
+accompany the figure.
+
+## Export
+
 Export either mode without downloading data or starting the simulator:
 
 ```bash
