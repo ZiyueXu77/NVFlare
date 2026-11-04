@@ -196,30 +196,41 @@ subsequent bounded real-data CUDA comparison recorded in
 publications through synthesis/KD warmup, with aligned curves and accepted
 schedules. It does not establish full paper-length or multi-seed equivalence.
 
-Stage 5 demonstrates reusable components in other applications:
+Stage 5 is delivered through an independent FedDF example branch,
+`codex/feddf-example-curves`. Wait for #5573 and #5613 to merge before opening
+its upstream PR; rebase onto the merged dependencies and remove inherited
+Stage 4 changes from that PR's diff.
 
 - The existing [async CIFAR-10 example](../../examples/advanced/collab/pt_async_cifar10/README.md)
-  already supplies the independent FedBuff consumer (`AsyncRecipe`, K=8/B=4/O=1).
-- The new [synchronous CIFAR-10 KD example](../../examples/advanced/collab/pt_cifar10/fedkd/README.md)
-  imports `DistillationTrainer` and `kl_divergence` into ordinary `CollabRecipe`
-  rounds. It reuses the FedAvg client and compares weight averaging with KD on
-  identical private shards. A server proxy subset is reserved before client
-  partitioning; the official test set is evaluation-only. Neither async nor
-  FedRevive is required by that consumer.
+  supplies the independent FedBuff consumer (`AsyncRecipe`, K=8/B=4/O=1).
+- The [synchronous FedDF example](../../examples/advanced/collab/pt_cifar10/feddf/README.md)
+  replaces the earlier KD demonstration. It reuses the FedAvg client and model,
+  initializes the student from uniformly averaged current client parameters,
+  and supplies a mean-logit ensemble to `DistillationTrainer`. Its distilled
+  student becomes the next round's global model. It requires neither async
+  execution nor FedRevive imports.
 
-Start with supplied proxy batches and the same model architecture. Optional
-synthetic-batch consumers and broader execution/accuracy qualification can
-follow. FedRevive ablation controls are not the acceptance criterion for this
-stage. Keep task-specific preparation, models and defaults in examples, and add
-shared helper behavior only when an independent consumer needs it.
+The example includes measured FedAvg/FedDF round 0–100 curves, CSV and protocol
+metadata from a separate, code-aligned ResNet-8-BN reference experiment. The
+compact runnable demo uses different data/training defaults. The single-seed
+curves show 39.88% versus 69.28% accuracy at round 100; neither reaches the
+75% target, so paper target-round counts are not claimed reproduced.
 
-The first KD consumer adds two focused tests: complete, disjoint and repeatable
-proxy/client partitions; and KD that improves teacher agreement without
-averaging parameters or mutating teachers. The 297-case affected suite passes.
-Both aggregation modes complete two rounds through the real Collab simulator
-using small synthetic CIFAR-shaped data, with identical initial models. Both
-exported configurations reconstruct and aggregate in isolated interpreters
-against a freshly built/installed NVFlare wheel, without source-checkout or
-FedRevive imports. Project style, license and documentation-link checks pass.
-These checks establish execution and reuse, not real-data accuracy improvement;
-the heterogeneous CIFAR-10 comparison remains to be run.
+Final validation and any execution/recovery limitations are tracked in
+[issue #5572](https://github.com/NVIDIA/NVFlare/issues/5572). Earlier generic-KD
+validation does not qualify the replacement FedDF implementation. No SDK or
+FedRevive algorithm changes are needed for this consumer.
+
+Replacement validation (2026-11-04): the two focused example cases pass,
+including a direct one-step Adam comparison that distinguishes mean-logit KL
+from mean per-teacher KL and verifies average initialization, buffer policy
+and teacher immutability. Both modes complete two rounds with two real Collab
+simulator clients on 80 private CIFAR-10 images and 16 proxy images, with equal
+initial states and finite final states; evaluation uses the official test set.
+Recipe CLI export and imports from the exported source tree pass. Scoped
+Black/isort/flake8, Markdown asset links and unit-test timing contracts pass.
+The affected example/export/KD-helper run reports 18 passing cases and the
+previously recorded PyTorch 2.11 optional synthesis meta-device failure
+(`Tensor.item() cannot be called on meta tensors`). That synthesis path is not
+used by FedDF. These smoke checks do not rerun the long ResNet reference pair
+or establish installed-wheel/distributed recovery qualification.

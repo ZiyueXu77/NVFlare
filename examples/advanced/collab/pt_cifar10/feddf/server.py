@@ -21,10 +21,10 @@ from pathlib import Path
 
 import torch
 
+from nvflare.app_common.aggregators.weighted_aggregation_helper import WeightedAggregationHelper
 from nvflare.app_opt.pt.distillation import DistillationTrainer, kl_divergence
 from nvflare.collab import collab
 
-from ..aggregation import aggregate_result
 from ..fedavg.client import BATCH_SIZE, LEARNING_RATE, LOCAL_EPOCHS
 from ..fedavg.server import TRAIN_TIMEOUT, FedAvgServer
 from ..loader import make_data_loader
@@ -37,19 +37,30 @@ def _teacher(weights):
     return model
 
 
-class FedKDServer:
+class MeanLogitEnsemble(torch.nn.Module):
+    """Expose current-round mean logits as one teacher for the shared trainer."""
+
+    def __init__(self, states):
+        super().__init__()
+        self.models = torch.nn.ModuleList([_teacher(state) for state in states])
+
+    def forward(self, inputs):
+        return torch.stack([model(inputs) for model in self.models]).mean(dim=0)
+
+
+class FedDFServer:
     def __init__(
         self,
         num_rounds=20,
-        aggregation="kd",
-        split_root="/tmp/cifar10_splits/pt_cifar10_fedkd",
+        aggregation="feddf",
+        split_root="/tmp/cifar10_splits/pt_cifar10_feddf",
         seed=10,
         kd_epochs=1,
         kd_lr=0.001,
-        temperature=2.0,
+        temperature=1.0,
     ):
-        if aggregation not in ("fedavg", "kd"):
-            raise ValueError("aggregation must be fedavg or kd")
+        if aggregation not in ("fedavg", "feddf"):
+            raise ValueError("aggregation must be fedavg or feddf")
         if num_rounds < 1 or kd_epochs < 1 or kd_lr <= 0 or temperature <= 0:
             raise ValueError("Round count, KD epochs, learning rate and temperature must be positive")
         self.num_rounds = num_rounds
@@ -61,11 +72,10 @@ class FedKDServer:
         self.temperature = temperature
 
     def aggregate(self, model, client_results, proxy_loader, round_number):
-        """Retain round semantics while replacing only server aggregation.
+        """Average current client parameters, then optionally distill mean logits.
 
-        KD starts from the previous global model, without parameter averaging.
-        Each current-round teacher contributes equally to the mean KL loss.
-        The FedAvg baseline retains the existing local-step weighting.
+        Both modes use uniform averaging. Non-parameter buffers come from the
+        last client in stable site order; the shared simple model has none.
         """
         if client_results.failures:
             raise next(iter(client_results.failures.values()))
@@ -73,13 +83,23 @@ class FedKDServer:
         results = sorted(client_results)
         if not results:
             raise ValueError("No client models were returned")
+        # Average parameters only; retain the final teacher's buffers explicitly.
+        helper = WeightedAggregationHelper()
+        parameter_names = dict(model.named_parameters())
+        for site, result in results:
+            helper.add(
+                data={name: result["weights"][name] for name in parameter_names},
+                weight=1,
+                contributor_name=site,
+                contribution_round=round_number,
+            )
+        model.load_state_dict(dict(results[-1][1]["weights"], **helper.get_result()))
         if self.aggregation == "fedavg":
-            model.load_state_dict(aggregate_result(client_results, "weights", round_number))
             return {}
 
         trainer = DistillationTrainer(
             student=model,
-            teachers=[partial(_teacher, result["weights"]) for _, result in results],
+            teachers=[partial(MeanLogitEnsemble, [result["weights"] for _, result in results])],
             optimizer_factory=partial(torch.optim.Adam, lr=self.kd_lr),
             device=next(model.parameters()).device,
             batch_adapter=lambda batch: batch[0],  # Proxy targets never enter the loss.
@@ -95,6 +115,7 @@ class FedKDServer:
             steps += metrics["steps"]
         return {"kd_loss": total_loss / samples, "kd_steps": steps, "kd_samples": samples}
 
+    # Collab invokes this decorated method as the server workflow entry point.
     @collab.main
     def run(self):
         manifest = json.loads((Path(self.split_root) / "manifest.json").read_text())
@@ -105,7 +126,7 @@ class FedKDServer:
         model = SimpleNetwork().to(device)
         test_loader = make_data_loader(train=False, batch_size=BATCH_SIZE)
         proxy_loader = None
-        if self.aggregation == "kd":
+        if self.aggregation == "feddf":
             # An independent loader generator prevents teacher construction from
             # changing proxy order. The same prepared transform is used by clients.
             proxy_loader = make_data_loader(
@@ -123,8 +144,9 @@ class FedKDServer:
             local_batch_size=BATCH_SIZE,
             local_lr=LEARNING_RATE,
             local_epochs=LOCAL_EPOCHS,
-            kd_teacher_weighting="uniform",
-            fedavg_weighting="local_steps",
+            kd_target="uniform_mean_logits",
+            parameter_weighting="uniform",
+            buffer_policy="last_site_in_sorted_order",
         )
         (run_dir / "run_config.json").write_text(json.dumps(config, indent=2))
         torch.save(get_model_state(model), run_dir / "initial_model.pt")
@@ -132,6 +154,7 @@ class FedKDServer:
         for round_number in range(self.num_rounds):
             if collab.is_aborted:
                 raise RuntimeError("Training aborted")
+            # Invoke the FedAvgClient published train method and wait for replies.
             results = collab.clients(timeout=TRAIN_TIMEOUT).train(get_model_state(model))
             started = time.perf_counter()
             metrics = self.aggregate(model, results, proxy_loader, round_number)

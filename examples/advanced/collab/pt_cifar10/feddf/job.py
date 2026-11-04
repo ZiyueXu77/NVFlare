@@ -21,13 +21,13 @@ from nvflare.recipe import SimEnv
 
 from ..fedavg.client import FedAvgClient
 from .prepare_data import DEFAULT_SPLIT_ROOT
-from .server import FedKDServer
+from .server import FedDFServer
 
 
 def make_recipe(args):
     if args.num_clients < 1:
         raise ValueError("num_clients must be positive")
-    server = FedKDServer(
+    server = FedDFServer(
         num_rounds=args.num_rounds,
         aggregation=args.aggregation,
         split_root=args.split_root,
@@ -36,6 +36,7 @@ def make_recipe(args):
         kd_lr=args.kd_lr,
         temperature=args.temperature,
     )
+    # Wire the synchronous server to the existing published FedAvg client.
     return CollabRecipe(
         job_name=f"collab_cifar10_{args.aggregation}_proxy",
         server=server,
@@ -49,15 +50,15 @@ def make_recipe(args):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--aggregation", choices=("fedavg", "kd"), default="kd")
+    parser.add_argument("--aggregation", choices=("fedavg", "feddf"), default="feddf")
     parser.add_argument("--num-clients", type=int, default=8)
     parser.add_argument("--num-rounds", type=int, default=20)
     parser.add_argument("--split-root", default=DEFAULT_SPLIT_ROOT)
     parser.add_argument("--seed", type=int, default=10)
     parser.add_argument("--kd-epochs", type=int, default=1)
     parser.add_argument("--kd-lr", type=float, default=0.001)
-    parser.add_argument("--temperature", type=float, default=2.0)
-    parser.add_argument("--workspace-root", default="/tmp/nvflare/collab-fedkd")
+    parser.add_argument("--temperature", type=float, default=1.0)
+    parser.add_argument("--workspace-root", default="/tmp/nvflare/collab-feddf")
     args = parser.parse_args()
     recipe = make_recipe(args)
     run = recipe.execute(SimEnv(num_clients=args.num_clients, workspace_root=args.workspace_root))

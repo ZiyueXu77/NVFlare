@@ -60,7 +60,7 @@
     "One chosen seed (7) initially; original table mean/std uses three unspecified seeds.",
     "Modern PyTorch, persistent worker pools and sequential client simulation replace old MPI worker scheduling.",
     "Released proxy loader uses conf.batch_size=64 although the paper describes 128 distillation batches; follow released loader.",
-    "The default example workflow uses a different model, data split and aggregation objective.",
+    "The compact runnable example uses the same FedDF composition but different model, data split, participation and training/stopping defaults.",
     "Neither method reached 75% during the displayed 100-round window; this is not a reproduction of the published Table 1 target-round counts."
   ]
 }

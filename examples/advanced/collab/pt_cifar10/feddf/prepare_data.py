@@ -24,7 +24,7 @@ from torchvision import datasets
 from ..data.cifar10_data_utils import CIFAR10_ROOT
 from ..prepare_data import partition_data
 
-DEFAULT_SPLIT_ROOT = "/tmp/cifar10_splits/pt_cifar10_fedkd"
+DEFAULT_SPLIT_ROOT = "/tmp/cifar10_splits/pt_cifar10_feddf"
 
 
 def prepare_splits(labels, split_root, num_clients=8, alpha=0.1, proxy_size=5000, seed=0):
