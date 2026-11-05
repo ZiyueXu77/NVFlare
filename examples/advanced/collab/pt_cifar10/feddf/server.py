@@ -16,19 +16,18 @@
 
 import json
 import time
-from functools import partial
 from pathlib import Path
 
 import torch
 
 from nvflare.app_common.aggregators.weighted_aggregation_helper import WeightedAggregationHelper
-from nvflare.app_opt.pt.distillation import DistillationTrainer, kl_divergence
 from nvflare.collab import collab
 
 from ..fedavg.client import BATCH_SIZE, LEARNING_RATE, LOCAL_EPOCHS
 from ..fedavg.server import TRAIN_TIMEOUT, FedAvgServer
 from ..loader import make_data_loader
 from ..model import SimpleNetwork, get_model_state
+from .distiller import Cifar10DistillerFactory
 
 
 def _teacher(weights):
@@ -58,6 +57,7 @@ class FedDFServer:
         kd_epochs=1,
         kd_lr=0.001,
         temperature=1.0,
+        distiller_factory=None,
     ):
         if aggregation not in ("fedavg", "feddf"):
             raise ValueError("aggregation must be fedavg or feddf")
@@ -70,6 +70,7 @@ class FedDFServer:
         self.kd_epochs = kd_epochs
         self.kd_lr = kd_lr
         self.temperature = temperature
+        self.distiller_factory = distiller_factory
 
     def aggregate(self, model, client_results, proxy_loader, round_number):
         """Average current client parameters, then optionally distill mean logits.
@@ -97,22 +98,25 @@ class FedDFServer:
         if self.aggregation == "fedavg":
             return {}
 
-        trainer = DistillationTrainer(
-            student=model,
-            teachers=[partial(MeanLogitEnsemble, [result["weights"] for _, result in results])],
-            optimizer_factory=partial(torch.optim.Adam, lr=self.kd_lr),
-            device=next(model.parameters()).device,
-            batch_adapter=lambda batch: batch[0],  # Proxy targets never enter the loss.
-            loss_fn=partial(kl_divergence, temperature=self.temperature),
+        factory = (
+            Cifar10DistillerFactory(kd_lr=self.kd_lr, temperature=self.temperature)
+            if self.distiller_factory is None
+            else self.distiller_factory
         )
+        distiller = factory(student=model, teacher=MeanLogitEnsemble([result["weights"] for _, result in results]))
         total_loss, samples, steps = 0.0, 0, 0
-        for _ in range(self.kd_epochs):
-            if collab.is_aborted:
-                raise RuntimeError("Distillation aborted")
-            metrics = trainer.fit(proxy_loader)
-            total_loss += metrics["loss"] * metrics["samples"]
-            samples += metrics["samples"]
-            steps += metrics["steps"]
+        try:
+            for _ in range(self.kd_epochs):
+                if collab.is_aborted:
+                    raise RuntimeError("Distillation aborted")
+                metrics = distiller.fit(proxy_loader)
+                total_loss += metrics["loss"] * metrics["samples"]
+                samples += metrics["samples"]
+                steps += metrics["steps"]
+            # Backends may own a wrapped/copied student; publish only its snapshot.
+            model.load_state_dict(distiller.export_student_state())
+        finally:
+            distiller.close()
         return {"kd_loss": total_loss / samples, "kd_steps": steps, "kd_samples": samples}
 
     # Collab invokes this decorated method as the server workflow entry point.
@@ -139,11 +143,19 @@ class FedDFServer:
         run_dir = Path(collab.workspace.get_run_dir(collab.fl_ctx.get_job_id()))
         run_dir.mkdir(parents=True, exist_ok=True)
         config = dict(
-            vars(self),
+            {key: value for key, value in vars(self).items() if key != "distiller_factory"},
             data=manifest,
             local_batch_size=BATCH_SIZE,
             local_lr=LEARNING_RATE,
             local_epochs=LOCAL_EPOCHS,
+            distiller_factory=(
+                type(self.distiller_factory).__name__
+                if self.distiller_factory is not None
+                else "Cifar10DistillerFactory"
+            ),
+            distiller_backend=getattr(
+                self.distiller_factory, "backend", "native" if self.distiller_factory is None else "custom"
+            ),
             kd_target="uniform_mean_logits",
             parameter_weighting="uniform",
             buffer_policy="last_site_in_sorted_order",

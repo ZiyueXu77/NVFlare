@@ -234,3 +234,21 @@ previously recorded PyTorch 2.11 optional synthesis meta-device failure
 (`Tensor.item() cannot be called on meta tensors`). That synthesis path is not
 used by FedDF. These smoke checks do not rerun the long ResNet reference pair
 or establish installed-wheel/distributed recovery qualification.
+
+Replaceable-distiller follow-up (2026-11-05): the working branch includes the
+pending KD dependency update from #5613 (`20fafba47`, cherry-picked here).
+The FedDF consumer now injects an exportable `Cifar10DistillerFactory`, with
+native/ModelOpt/torchdistill selection. Its round loop uses only `fit`,
+`export_student_state` and `close`, loads the student snapshot for broadcast,
+and closes in `finally`. The 0–100 reference curves are unchanged.
+
+The SDK affected suite passes 100 cases, and 17 new session contracts pass
+against an isolated wheel. Optional imports are lazy; native training works
+when both external libraries are unavailable. The meta-device allocation test
+now uses SGD, resolving the previously recorded Adam compatibility issue.
+All three distillers complete the same bounded two-client/two-round CPU Collab
+run on the existing 80-private/16-proxy CIFAR split, with identical initial and
+final model tensors. The example/export checks pass seven cases. These are
+smoke/numerical checks, not new paper-accuracy, GPU or recovery qualification.
+The eventual Stage 5-only PR must exclude this pending SDK dependency update
+as well as the inherited Stage 4 changes after dependencies merge.

@@ -108,3 +108,49 @@ def test_feddf_averages_then_distills_mean_logits_without_mutating_teachers(fedd
     for teacher, state in zip(teachers, states):
         for name, value in teacher.state_dict().items():
             torch.testing.assert_close(value, state[name], rtol=0, atol=0)
+
+
+@pytest.mark.parametrize("fail", [False, True])
+def test_server_uses_replaceable_session_export_and_always_closes(feddf, monkeypatch, fail):
+    from copy import deepcopy
+
+    import torch
+    from torch import nn
+
+    from nvflare.collab.api.group_call_context import FrozenResultQueue
+
+    server = feddf("server")
+    monkeypatch.setattr(server, "SimpleNetwork", lambda: nn.Linear(2, 2, bias=False))
+    monkeypatch.setattr(server, "collab", SimpleNamespace(is_aborted=False))
+    states = [{"weight": torch.full((2, 2), value)} for value in (1.0, 3.0)]
+    results = FrozenResultQueue([(f"site-{i}", {"weights": weights}) for i, weights in enumerate(states)], {}, 2)
+    captured = {}
+
+    class Session:
+        # Deliberately no student or optimizer attributes.
+        def fit(self, batches):
+            if fail:
+                raise RuntimeError("backend failed")
+            return {"loss": 0.1, "steps": 1, "samples": 4}
+
+        def export_student_state(self):
+            return {"weight": captured["average"]["weight"] + 0.5}
+
+        def close(self):
+            captured["closed"] = True
+
+    def factory(student, teacher):
+        captured["average"] = deepcopy(student.state_dict())
+        return Session()
+
+    model = nn.Linear(2, 2, bias=False)
+    workflow = server.FedDFServer(distiller_factory=factory)
+    if fail:
+        with pytest.raises(RuntimeError, match="backend failed"):
+            workflow.aggregate(model, results, [], 0)
+    else:
+        metrics = workflow.aggregate(model, results, [], 0)
+        assert metrics["kd_steps"] == 1
+        torch.testing.assert_close(model.weight, torch.full((2, 2), 2.5))
+    torch.testing.assert_close(captured["average"]["weight"], torch.full((2, 2), 2.0))
+    assert captured["closed"]

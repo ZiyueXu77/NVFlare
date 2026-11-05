@@ -20,6 +20,7 @@ from nvflare.collab import CollabRecipe
 from nvflare.recipe import SimEnv
 
 from ..fedavg.client import FedAvgClient
+from .distiller import Cifar10DistillerFactory
 from .prepare_data import DEFAULT_SPLIT_ROOT
 from .server import FedDFServer
 
@@ -35,6 +36,7 @@ def make_recipe(args):
         kd_epochs=args.kd_epochs,
         kd_lr=args.kd_lr,
         temperature=args.temperature,
+        distiller_factory=Cifar10DistillerFactory(args.distiller, args.kd_lr, args.temperature),
     )
     # Wire the synchronous server to the existing published FedAvg client.
     return CollabRecipe(
@@ -51,6 +53,7 @@ def make_recipe(args):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--aggregation", choices=("fedavg", "feddf"), default="feddf")
+    parser.add_argument("--distiller", choices=("native", "modelopt", "torchdistill"), default="native")
     parser.add_argument("--num-clients", type=int, default=8)
     parser.add_argument("--num-rounds", type=int, default=20)
     parser.add_argument("--split-root", default=DEFAULT_SPLIT_ROOT)

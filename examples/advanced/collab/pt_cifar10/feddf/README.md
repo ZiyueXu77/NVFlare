@@ -25,6 +25,7 @@ the downloaded `collab-pt` directory, where the `collab` package is visible.
 ## Code structure
 
 - `server.py`: synchronous workflow, uniform averaging and mean-logit ensemble.
+- `distiller.py`: exportable factory binding optional backend settings.
 - `job.py`: CLI, `CollabRecipe` wiring, simulation and export.
 - `prepare_data.py`: disjoint client/proxy partitions.
 - `../fedavg/client.py`, `../model.py`, `../loader.py`: shared training, model and data utilities.
@@ -62,9 +63,14 @@ call invokes the published client method and waits for successful replies plus
 failures. The server rejects incomplete rounds before fusion.
 
 `MeanLogitEnsemble` wraps current-round teachers as **one** teacher for the
-shared trainer. This makes its loss KL against mean logits, rather than the
-mean of separate teacher KL losses. `DistillationTrainer` copies, freezes and
+selected distiller. This makes its loss KL against mean logits, rather than the
+mean of separate teacher KL losses. Each built-in distiller copies, freezes and
 puts that ensemble in evaluation mode while training the averaged student.
+The server calls only `fit()`, `export_student_state()` and `close()`, with
+cleanup in `finally`. It loads the exported student state before evaluation and
+broadcast, so a backend can own its wrapped/copied student. `FedDFServer` accepts
+an exportable callable `distiller_factory`; `Cifar10DistillerFactory` binds the
+backend configuration and keeps external internals out of the round loop.
 The server then evaluates the student and uses it for the next round.
 
 ## Job recipe and run
@@ -88,6 +94,25 @@ extra proxy data and server compute; improved accuracy is not guaranteed.
 This compact demonstration differs from the reference experiment below in
 model, partition, participation, local training and server stopping policy.
 These commands do not reproduce the published curves.
+
+## Optional distillation backends
+
+The native implementation remains the default and requires neither external
+library. To try a selected backend, install it in the same NVFlare environment:
+
+```bash
+python -m pip install nvidia-modelopt==0.48.0
+python -m collab.pt_cifar10.feddf.job --aggregation feddf --distiller modelopt
+```
+
+Alternatively, install `torchdistill==1.1.5` and pass `--distiller torchdistill`.
+The factory explicitly preserves mean-logit targets, pure KD, temperature-squared
+scaling, batchmean reduction and Adam settings. Each proxy batch is one optimizer
+update; accumulation is unsupported. Optional packages load only when selected.
+Backend optimizers/checkpoint formats are not portable through this interface.
+Synthesis and FedRevive's specialized per-teacher policy remain separate.
+These backends have bounded CPU/numerical qualification, not a new full CIFAR
+accuracy reproduction; the reference curves below are unchanged.
 
 ## Outputs
 
