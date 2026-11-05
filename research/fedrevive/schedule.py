@@ -38,7 +38,7 @@ class PhaseSchedule:
 
     Runtime profiles persist by logical client. Keep RandomState, sampling order
     and the linear training-seed mapping from the reference experiment. Fixed
-    replay and actual arrivals are different policies, not modes of core AsyncRecipe.
+    replay and actual arrivals are different policies, not modes of core FedBuffRecipe.
     """
 
     def __init__(self, profiles, run_seed, max_time):

@@ -42,22 +42,22 @@ class ClassProportionSource(str, Enum):
 class MethodConfig:
     """Paper configuration that controls scheduling and aggregation.
 
-    K (num_active_jobs) bounds logical concurrency, B (buffer_size) controls
-    how many arrivals create a global version, and O (min_open_slots) controls
-    when that version is redistributed.  In particular, O=1 is asynchronous
-    FedBuff while O=B=K gives the synchronous FedAvg boundary.
+    concurrency bounds active logical clients; buffer_size counts accepted
+    contributions per global version; min_open_slots controls refill. A refill
+    threshold of one gives immediate asynchronous replacement. Setting all
+    three counts equal gives the synchronous FedAvg boundary.
     """
 
-    num_active_jobs: int
+    concurrency: int
     buffer_size: int
     min_open_slots: int
     server_lr: float
 
 
 FIGURE_2_METHOD_CONFIGS = {
-    Method.FEDAVG: MethodConfig(num_active_jobs=100, buffer_size=100, min_open_slots=100, server_lr=1.4),
-    Method.FEDBUFF: MethodConfig(num_active_jobs=100, buffer_size=2, min_open_slots=1, server_lr=0.05),
-    Method.FEDREVIVE: MethodConfig(num_active_jobs=100, buffer_size=1, min_open_slots=1, server_lr=0.10),
+    Method.FEDAVG: MethodConfig(concurrency=100, buffer_size=100, min_open_slots=100, server_lr=1.4),
+    Method.FEDBUFF: MethodConfig(concurrency=100, buffer_size=2, min_open_slots=1, server_lr=0.05),
+    Method.FEDREVIVE: MethodConfig(concurrency=100, buffer_size=1, min_open_slots=1, server_lr=0.10),
 }
 
 

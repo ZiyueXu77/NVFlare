@@ -40,7 +40,7 @@ def research(monkeypatch):
 
 def test_revival_uses_current_global_delta_and_refreshes_arriving_teacher(research, tmp_path):
     torch = pytest.importorskip("torch")
-    from nvflare.collab.async_recipe import AcceptedUpdate, Assignment
+    from nvflare.collab.fedbuff_recipe import AcceptedUpdate, Assignment
 
     policy_module = research("update")
     policy = policy_module.FedReviveUpdate("unused")

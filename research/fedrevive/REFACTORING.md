@@ -13,12 +13,14 @@ presets in the research application.
 | `codex/fedrevive-dependencies` | Combined async and KD PR heads, without FedRevive edits | Dependency baseline only |
 | `codex/fedrevive` | FedRevive changes above that baseline | Compare against `codex/fedrevive-dependencies` until both PRs merge |
 
-Initial dependency baseline: `474c0e27608ebda5457b92ca58a25ce565c1cf92`.
-The baseline merges these commits without changing their source branches:
+Current dependency baseline: `655d40622b77abc310b16c2a656d8c9cb01c568b`.
+The initial baseline was `474c0e27608ebda5457b92ca58a25ce565c1cf92`; the current
+baseline adds the FedBuff/concurrency naming change from the async PR. Its pinned
+source heads are:
 
 | Dependency | Branch | Pinned head |
 | --- | --- | --- |
-| [Async recipe, PR #5573](https://github.com/NVIDIA/NVFlare/pull/5573) | `codex/generalizable-async-recipe` | `03ac789dabf4303a44fcd4238db3674ad7d2c6b5` |
+| [FedBuff recipe, PR #5573](https://github.com/NVIDIA/NVFlare/pull/5573) | `codex/generalizable-async-recipe` | `01f7c3ba07dcf3a57b1e9b385681c7490aa93358` |
 | [Standalone KD and synthesis, PR #5613](https://github.com/NVIDIA/NVFlare/pull/5613) | `codex/standalone-kd` | `f021a57b45c60b088988c3cafc3cdb30e5d4207e` |
 
 The recorded commits are source-history pins, not package-version dependencies.
@@ -91,9 +93,9 @@ pushing. Retain this migration record until the final review is complete.
    contracts match. Keep the conditional generator, optimized latent/embedding
    tensors, Reptile meta-update, per-teacher sampling/weighting, augmentation,
    loss stabilization and tracker policy in the research implementation.
-4. **Async workflows.** Compose actual-arrival training from `AsyncRecipe`.
+4. **Async workflows.** Compose actual-arrival training from `FedBuffRecipe`.
    Migrate the seeded download/train/upload scheduler to the research workflow,
-   reusing `AsyncTrainingCoordinator`, Collab calls and disk-first artifacts.
+   reusing `FedBuffTrainingCoordinator`, Collab calls and disk-first artifacts.
    Preserve logical-client release after training, before upload, and the
    simulated-time cutoff. Fixed-order replay alone does not implement this policy.
 5. **Independent reuse and qualification.** Compare fixed updates and a small
@@ -115,7 +117,7 @@ Preserve the reference `run_seed * 1_000_000 + assignment_id + 1` training seeds
 and NumPy `RandomState` scheduler draws. The generic example seed hash and
 vectorized class sampler have different draw orders; substituting them is not
 an exact replay. Preserve the version-50 synthesis gate, version-100 KD gate,
-generation interval, tracker resets and method K/B/O/server-LR presets.
+generation interval, tracker resets and method concurrency/buffer/refill/server-LR presets.
 
 Basic KD detaches teacher outputs. Adversarial synthesis must retain gradients
 through both teacher and student outputs to generated inputs. A single shared
@@ -143,7 +145,7 @@ proxies, preserves the version-50/version-100 gates, and blends the exact-base
 client delta with the current-global KD delta. `FedAvgUpdate` preserves the
 same-base-per-buffer check when users override method presets.
 
-`FedReviveWorkflow` reuses `AsyncWorkflow` calls and lifecycle. Its phase scheduler
+`FedReviveWorkflow` reuses `FedBuffWorkflow` calls and lifecycle. Its phase scheduler
 retains the reference `RandomState`, heap tie rule, logical release point and
 linear training seeds. Research reservations retain speculative assignments near
 the horizon, as the reference did. `TensorStore` retains bases/results and all
@@ -199,7 +201,7 @@ schedules. It does not establish full paper-length or multi-seed equivalence.
 Stage 5 demonstrates reusable components in other applications:
 
 - The existing [async CIFAR-10 example](../../examples/advanced/collab/pt_async_cifar10/README.md)
-  already supplies the independent FedBuff consumer (`AsyncRecipe`, K=8/B=4/O=1).
+  already supplies the independent FedBuff consumer (`FedBuffRecipe`, concurrency=8, buffer_size=4, min_open_slots=1).
 - The new [synchronous CIFAR-10 KD example](../../examples/advanced/collab/pt_cifar10/fedkd/README.md)
   imports `DistillationTrainer` and `kl_divergence` into ordinary `CollabRecipe`
   rounds. It reuses the FedAvg client and compares weight averaging with KD on

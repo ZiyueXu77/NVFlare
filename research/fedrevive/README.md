@@ -24,7 +24,7 @@ The simulated-time scheduler in `schedule.py` is a controlled-experiment harness
 it replays the paper's seeded delay schedules on a small physical worker pool
 so results do not depend on host speed. It is not the recommended deployment
 pattern for FedRevive. For real asynchronous training, use `--arrival-mode actual`, which composes
-the shared `AsyncRecipe` with the same optional FedRevive update transform.
+the shared `FedBuffRecipe` with the same optional FedRevive update transform.
 
 CIFAR-100, FEMNIST, 20NewsGroups, DD-FedRevive, and AFL-DW are outside this
 initial contribution.
@@ -66,19 +66,19 @@ paper experiment; real deployments use actual client arrivals directly.
 
 The server exposes three scheduling parameters:
 
-- `K` (`--num-active-jobs`) is the maximum number of concurrent client jobs.
-- `B` (`--buffer-size`) is the number of returned updates required to create a
+- Concurrency (`--concurrency`) is the maximum number of concurrent client jobs.
+- Buffer size (`--buffer-size`) is the number of returned updates required to create a
   new global model version.
-- `O` (`--min-open-slots`) is the number of open execution slots required
+- Minimum open slots (`--min-open-slots`) is the number of open execution slots required
   before the current global model is distributed to more clients.
 
 All returned models pass through the same update function. The client delta is
 computed against the exact model snapshot used by that assignment. The shared
-`AsyncTrainingCoordinator` accumulates accepted deltas in a running sum and
-publishes only after `B` contributions. The previous `--no-in-time` storage
+`FedBuffTrainingCoordinator` accumulates accepted deltas in a running sum and
+publishes only after `buffer_size` contributions. The previous `--no-in-time` storage
 switch is rejected; use the retained raw-result files to inspect individual updates. The method presets are:
 
-| Method | `K` | `B` | `O` | Server learning rate |
+| Method | Concurrency | Buffer size | Minimum open slots | Server learning rate |
 |---|---:|---:|---:|---:|
 | FedAvg | 100 | 100 | 100 | 1.4 |
 | FedBuff | 100 | 2 | 1 | 0.05 |
@@ -88,7 +88,7 @@ Thus, FedAvg waits for all 100 results before producing and redistributing the
 next global model; FedBuff immediately refills each open slot but creates a
 version every two arrivals; and FedRevive immediately refills the open slot
 and creates a version from each arrival. Explicit CLI overrides allow other
-`K/B/O` configurations.
+concurrency, buffer-size and refill configurations.
 
 The Collab calls are genuinely nonblocking. Physical sites perform PyTorch
 training while the server keeps other calls in flight. For reproducible runs,
@@ -112,7 +112,7 @@ behavior.
 
 | Component | Responsibility |
 | --- | --- |
-| `nvflare.collab.async_recipe` | Shared assignment acceptance, buffered publication, Collab calls, one bounded receipt queue and lifecycle |
+| `nvflare.collab.fedbuff_recipe` | Shared assignment acceptance, buffered publication, Collab calls, one bounded receipt queue and lifecycle |
 | `update.py` | Optional `FedReviveUpdate`: proxies, shared teacher history, revival gates and delta blending |
 | `dfkd.py` | Conditional generator, optimized latent/embedding tensors, Reptile update, weighted per-teacher objectives and sampling |
 | `schedule.py` | Seeded download/train/upload phases and logical-client eligibility |
@@ -121,9 +121,9 @@ behavior.
 | `server.py` | CIFAR model arithmetic, evaluation, configuration and model artifacts |
 
 `FedReviveWorkflow` inherits the protected call/lifecycle implementation from
-`AsyncWorkflow`; `PhaseCoordinator` inherits its numerical acceptance from
-`AsyncTrainingCoordinator`. There is no additional result-reader pool or
-reference-counted snapshot cache. K bounds logical assignments; physical sites
+`FedBuffWorkflow`; `PhaseCoordinator` inherits its numerical acceptance from
+`FedBuffTrainingCoordinator`. There is no additional result-reader pool or
+reference-counted snapshot cache. Concurrency bounds active logical clients; physical sites
 bound concurrent calls and the core receipt queue. The workflow writes completed
 results to disk before waiting for their logical upload phase, and loads exact
 assignment bases from disk only when needed.
@@ -336,15 +336,15 @@ schedule.
 A CUDA-capable GPU is recommended for both client training and FedRevive's
 server-side DFKD. Device selection defaults to `auto`; use `--client-device
 cpu` when GPU sharing is not appropriate. Use `--num-clients` to size the
-physical worker pool independently of logical `K`, and `--workspace-root` to
+physical worker pool independently of logical concurrency, and `--workspace-root` to
 select the output location.
 
 For a small functional test, reduce both the number of physical clients and
-`K`, and cap the number of versions:
+concurrency, and cap the number of versions:
 
 ```bash
 python job.py --method fedrevive \
-  --num-clients 2 --num-active-jobs 2 --buffer-size 1 --min-open-slots 1 \
+  --num-clients 2 --concurrency 2 --buffer-size 1 --min-open-slots 1 \
   --local-iterations 1 --max-model-versions 54 --max-time 1000 \
   --eval-interval 54 --server-device cpu
 ```
@@ -355,12 +355,12 @@ Use the production async recipe when host/RPC arrivals should determine acceptan
 
 ```bash
 python job.py --arrival-mode actual --method fedrevive \
-  --num-clients 2 --num-active-jobs 2 --buffer-size 1 --min-open-slots 1 \
+  --num-clients 2 --concurrency 2 --buffer-size 1 --min-open-slots 1 \
   --max-model-versions 120 --data-root /tmp/cifar10 \
   --prepared-data-root /tmp/fedrevive/cifar10
 ```
 
-Here K cannot exceed physical clients. Sites named `site-N` use prepared shard
+Here concurrency cannot exceed the physical client count. Sites named `site-N` use prepared shard
 `client-(N-1)`; sites named `client-N` use that shard directly. Each site keeps
 its shard identity, and assignment-derived seeds are still applied. The core
 recipe supplies actual arrival order; `--max-model-versions` is its stop budget.

@@ -38,7 +38,7 @@ from server import FedReviveApplication, FedReviveModelAdapter
 from update import FedAvgUpdate, FedReviveUpdate
 from workflow import FedReviveRecipe
 
-from nvflare.collab import AsyncRecipe
+from nvflare.collab import FedBuffRecipe
 from nvflare.recipe import SimEnv
 
 PROJECT_DIR = Path(__file__).resolve().parent
@@ -50,7 +50,7 @@ def define_parser():
         "--arrival-mode",
         choices=("simulated", "actual"),
         default="simulated",
-        help="Seeded paper phases or actual-arrival AsyncRecipe",
+        help="Seeded paper phases or actual-arrival FedBuffRecipe",
     )
     parser.add_argument(
         "--method",
@@ -65,17 +65,19 @@ def define_parser():
     )
     parser.add_argument("--num-logical-clients", type=int, default=1000)
     parser.add_argument(
-        "--num-active-jobs",
+        "--concurrency",
         type=int,
         default=None,
-        help="K; defaults to the method preset",
+        help="Maximum concurrent logical clients; defaults to the method preset",
     )
-    parser.add_argument("--buffer-size", type=int, default=None, help="B; defaults to the method preset")
+    parser.add_argument(
+        "--buffer-size", type=int, default=None, help="Contributions per global model; defaults to the method preset"
+    )
     parser.add_argument(
         "--min-open-slots",
         type=int,
         default=None,
-        help="O; defaults to the method preset",
+        help="Free logical slots before refill; defaults to the method preset",
     )
     parser.add_argument("--server-lr", type=float, default=None)
     parser.add_argument(
@@ -167,7 +169,7 @@ def make_recipe(args):
     validate_args(args)
     method = Method(args.method)
     preset = FIGURE_2_METHOD_CONFIGS[method]
-    active_jobs = preset.num_active_jobs if args.num_active_jobs is None else args.num_active_jobs
+    concurrency = preset.concurrency if args.concurrency is None else args.concurrency
     buffer_size = preset.buffer_size if args.buffer_size is None else args.buffer_size
     open_slots = preset.min_open_slots if args.min_open_slots is None else args.min_open_slots
     class_proportion_source = args.class_proportion_source
@@ -180,21 +182,21 @@ def make_recipe(args):
     generation_interval = args.generation_interval
     if generation_interval is None:
         generation_interval = 10 if method is Method.FEDREVIVE else 1
-    if active_jobs < 1:
-        raise ValueError("K must be positive")
-    if buffer_size < 1 or not 1 <= open_slots <= active_jobs:
-        raise ValueError("B must be positive and O must be between 1 and K")
+    if concurrency < 1:
+        raise ValueError("concurrency must be positive")
+    if buffer_size < 1 or not 1 <= open_slots <= concurrency:
+        raise ValueError("buffer_size must be positive and min_open_slots must be between 1 and concurrency")
 
     if args.arrival_mode == "actual" and (
-        active_jobs > args.num_clients or args.num_clients > args.num_logical_clients
+        concurrency > args.num_clients or args.num_clients > args.num_logical_clients
     ):
-        raise ValueError("Actual arrivals require K <= physical clients <= prepared logical clients")
+        raise ValueError("Actual arrivals require concurrency <= physical clients <= prepared logical clients")
     server_lr = preset.server_lr if args.server_lr is None else args.server_lr
     if server_lr <= 0 or args.max_model_versions < 1:
         raise ValueError("server_lr and max_model_versions must be positive")
     config = vars(args).copy()
     config.update(
-        num_active_jobs=active_jobs,
+        concurrency=concurrency,
         buffer_size=buffer_size,
         min_open_slots=open_slots,
         server_lr=server_lr,
@@ -237,20 +239,20 @@ def make_recipe(args):
         run_seed=args.run_seed,
     )
     # SimEnv creates one process per physical site.  Physical sites are only a
-    # bounded execution pool and are deliberately independent of logical K.
+    # bounded execution pool and are deliberately independent of logical concurrency.
     # Bound Collab's call pools to that small pool instead of retaining the
-    # recipe default of 100 threads in every process.  This prevents a K=100
+    # recipe default of 100 threads in every process.  This prevents a concurrency=100
     # experiment from multiplying thread stacks and queued RPC state while the
     # server-side event scheduler still reproduces all 100 logical jobs.
     server_call_threads = max(8, 2 * args.num_clients)
     client_call_threads = 4
-    recipe_class = AsyncRecipe if args.arrival_mode == "actual" else FedReviveRecipe
+    recipe_class = FedBuffRecipe if args.arrival_mode == "actual" else FedReviveRecipe
     recipe = recipe_class(
         job_name=f"fedrevive_{method.value}",
         application=application,
         model_adapter=FedReviveModelAdapter(),
         num_updates=args.max_model_versions,
-        num_active_jobs=active_jobs,
+        concurrency=concurrency,
         buffer_size=buffer_size,
         min_open_slots=open_slots,
         server_lr=server_lr,
@@ -277,7 +279,7 @@ def make_recipe(args):
         "workflow.py",
     ):
         recipe.add_server_file(str(PROJECT_DIR / filename))
-    return recipe, (active_jobs, buffer_size, open_slots)
+    return recipe, (concurrency, buffer_size, open_slots)
 
 
 def main():
@@ -305,12 +307,14 @@ def main():
             f"Prepared data uses delay schedule {prepared_schedule!r}, but --delay-schedule={args.delay_schedule!r}"
         )
 
-    recipe, (active_jobs, buffer_size, open_slots) = make_recipe(args)
+    recipe, (concurrency, buffer_size, open_slots) = make_recipe(args)
     print("=" * 80)
     print(f"FEDREVIVE COLLAB FIGURE 2: {args.method}")
     print(f"  Physical clients: {args.num_clients}")
     print(f"  Logical clients: {args.num_logical_clients}")
-    print(f"  K/B/O: {active_jobs}/{buffer_size}/{open_slots}")
+    print(f"  Concurrency: {concurrency}")
+    print(f"  Buffer size: {buffer_size}")
+    print(f"  Minimum open slots: {open_slots}")
     print(f"  In-time accumulation: {args.in_time}")
     if args.arrival_mode == "simulated":
         print(f"  Simulated-time budget: {args.max_time}")

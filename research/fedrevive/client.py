@@ -51,7 +51,7 @@ def _trim_process_memory():
 class FedReviveClient:
     """Train prepared logical clients with one reusable physical-worker model.
 
-    The paper simulates K=100 concurrent *logical* clients, but creating that
+    The paper simulates 100 concurrent *logical* clients, but creating that
     many local NVFlare processes, dataset copies, thread pools, and CUDA
     contexts can exhaust a workstation.  A small pool of physical Collab sites
     instead multiplexes assignments.  Logical state lives in prepared shards
@@ -157,7 +157,7 @@ class FedReviveClient:
         assignment_id = int(assignment_ids[physical_name])
         shard_name = logical_name
         if train_seeds is None:
-            # Actual-arrival AsyncRecipe uses site identities directly. Map
+            # Actual-arrival FedBuffRecipe uses site identities directly. Map
             # conventional simulator sites to persistent prepared shard names.
             if logical_name.startswith("site-"):
                 shard_name = f"client-{int(logical_name.split('-', 1)[1]) - 1}"
@@ -226,7 +226,7 @@ class FedReviveClient:
         # can be discarded here without losing client state.  DataLoader and
         # iterator deletion also closes any per-assignment loader workers.  Keep
         # only one reusable model on CPU between calls and release CUDA caches;
-        # this bounds resources by physical sites instead of logical K.
+        # this bounds resources by physical sites instead of logical concurrency.
         model.to("cpu")
         del optimizer, loader, iterator, inputs, labels, outputs, loss, criterion
         gc.collect()

@@ -38,7 +38,7 @@ class TensorStore:
             torch.save(value, stream)
 
     def load(self, identity):
-        return torch.load(self.path(identity), map_location="cpu", weights_only=True, mmap=True)
+        return torch.load(str(self.path(identity)), map_location="cpu", weights_only=True, mmap=True)
 
 
 @dataclass(frozen=True)

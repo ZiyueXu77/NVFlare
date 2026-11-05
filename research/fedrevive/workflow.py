@@ -22,11 +22,11 @@ from schedule import PhaseSchedule
 from storage import DiskAssignment, TensorStore
 
 from nvflare.collab import collab
-from nvflare.collab.async_recipe import AsyncTrainingCoordinator, AsyncWorkflow
+from nvflare.collab.fedbuff_recipe import FedBuffTrainingCoordinator, FedBuffWorkflow
 from nvflare.collab.recipe import CollabRecipe
 
 
-class PhaseCoordinator(AsyncTrainingCoordinator):
+class PhaseCoordinator(FedBuffTrainingCoordinator):
     """Disk bases and speculative reservations needed by a simulated-time budget."""
 
     def __init__(self, *args, **kwargs):
@@ -36,9 +36,9 @@ class PhaseCoordinator(AsyncTrainingCoordinator):
 
     @property
     def available_slots(self):
-        # The reference reserves K jobs even near the version/time horizon.
+        # The reference reserves the configured concurrent assignments even near the version/time horizon.
         # Do not apply core's exact remaining-contribution budget to this policy.
-        slots = self.num_active_jobs - len(self.active)
+        slots = self.concurrency - len(self.active)
         return 0 if self._closed or self.finished or slots < self.min_open_slots else slots
 
     def reserve(self, logical_names, run_seed):
@@ -60,7 +60,7 @@ class PhaseCoordinator(AsyncTrainingCoordinator):
         return assignments
 
 
-class FedReviveWorkflow(AsyncWorkflow):
+class FedReviveWorkflow(FedBuffWorkflow):
     """Only phase/worker policy differs; core owns calls, cleanup and aggregation."""
 
     _coordinator_class = PhaseCoordinator
@@ -131,7 +131,7 @@ class FedReviveWorkflow(AsyncWorkflow):
 
 
 class FedReviveRecipe(CollabRecipe):
-    """Research composition; phase/time/storage controls stay outside AsyncRecipe."""
+    """Research composition; phase/time/storage controls stay outside FedBuffRecipe."""
 
     def __init__(
         self,
@@ -140,7 +140,7 @@ class FedReviveRecipe(CollabRecipe):
         application,
         model_adapter,
         num_updates,
-        num_active_jobs,
+        concurrency,
         buffer_size=1,
         min_open_slots=1,
         server_lr=1.0,
@@ -152,7 +152,7 @@ class FedReviveRecipe(CollabRecipe):
             application,
             model_adapter,
             num_updates,
-            num_active_jobs,
+            concurrency,
             buffer_size,
             min_open_slots,
             server_lr,
