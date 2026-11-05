@@ -13,14 +13,14 @@ presets in the research application.
 | `codex/fedrevive-dependencies` | Combined async and KD PR heads, without FedRevive edits | Dependency baseline only |
 | `codex/fedrevive` | FedRevive changes above that baseline | Compare against `codex/fedrevive-dependencies` until both PRs merge |
 
-Current dependency baseline: `655d40622b77abc310b16c2a656d8c9cb01c568b`.
+Current dependency baseline: `109b6da8dfb4933ffcd4efedf0e08812aa3458b2`.
 The initial baseline was `474c0e27608ebda5457b92ca58a25ce565c1cf92`; the current
-baseline adds the FedBuff/concurrency naming change from the async PR. Its pinned
+baseline adds the FedBuff naming and model-component split from the async PR. Its pinned
 source heads are:
 
 | Dependency | Branch | Pinned head |
 | --- | --- | --- |
-| [FedBuff recipe, PR #5573](https://github.com/NVIDIA/NVFlare/pull/5573) | `codex/generalizable-async-recipe` | `01f7c3ba07dcf3a57b1e9b385681c7490aa93358` |
+| [FedBuff recipe, PR #5573](https://github.com/NVIDIA/NVFlare/pull/5573) | `codex/generalizable-async-recipe` | `a98aa542a799eedd2cf79fe5461e3578e9a0b076` |
 | [Standalone KD and synthesis, PR #5613](https://github.com/NVIDIA/NVFlare/pull/5613) | `codex/standalone-kd` | `f021a57b45c60b088988c3cafc3cdb30e5d4207e` |
 
 The recorded commits are source-history pins, not package-version dependencies.

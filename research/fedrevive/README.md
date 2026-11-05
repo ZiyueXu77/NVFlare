@@ -118,7 +118,7 @@ behavior.
 | `schedule.py` | Seeded download/train/upload phases and logical-client eligibility |
 | `workflow.py` | Research reservations and physical-worker mapping over core calls/acceptance |
 | `storage.py` | Append-only tensor files in a fresh run directory |
-| `server.py` | CIFAR model arithmetic, evaluation, configuration and model artifacts |
+| `server.py` | Separate initial model loader, FedRevive model operations, and CIFAR evaluation/artifact observer |
 
 `FedReviveWorkflow` inherits the protected call/lifecycle implementation from
 `FedBuffWorkflow`; `PhaseCoordinator` inherits its numerical acceptance from
@@ -465,7 +465,7 @@ fedrevive/
 ├── data.py
 ├── model.py
 ├── client.py
-├── server.py             # Application/evaluation and model adapter
+├── server.py             # Model loader, operations, evaluation observer
 ├── schedule.py           # Seeded research phases
 ├── storage.py            # Retained tensor artifacts
 ├── update.py             # Optional FedRevive update transform

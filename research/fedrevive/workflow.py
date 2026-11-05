@@ -65,9 +65,43 @@ class FedReviveWorkflow(FedBuffWorkflow):
 
     _coordinator_class = PhaseCoordinator
 
+    def __init__(
+        self,
+        model_loader,
+        model_ops,
+        num_updates,
+        concurrency,
+        prepared_data_root,
+        run_seed,
+        max_time,
+        buffer_size=1,
+        min_open_slots=1,
+        server_lr=1.0,
+        update_transform=None,
+        call_timeout=3600.0,
+        observer=None,
+    ):
+        super().__init__(
+            model_loader,
+            model_ops,
+            num_updates,
+            concurrency,
+            buffer_size,
+            min_open_slots,
+            server_lr,
+            update_transform=update_transform,
+            call_timeout=call_timeout,
+            observer=observer,
+        )
+        if max_time <= 0:
+            raise ValueError("max_time must be positive")
+        self.prepared_data_root = prepared_data_root
+        self.run_seed = run_seed
+        self.max_time = max_time
+
     def _run(self, coordinator, names, submit, receive):
-        profiles = load_manifest(self.application.prepared_data_root)["runtime_profiles"]
-        scheduler = PhaseSchedule(profiles, self.application.run_seed, self.application.max_time)
+        profiles = load_manifest(self.prepared_data_root)["runtime_profiles"]
+        scheduler = PhaseSchedule(profiles, self.run_seed, self.max_time)
         results = TensorStore(coordinator.run_dir / "assignment_results")
         scheduler.initialize(coordinator, names)
         inflight = {}
@@ -78,7 +112,7 @@ class FedReviveWorkflow(FedBuffWorkflow):
                 seed = assignment.metadata["train_seed"]
                 submit(name, assignment, train_seeds={name: seed})
                 inflight[name] = assignment.assignment_id
-                self._hook("on_time", scheduler.time)
+                self._notify("on_time", scheduler.time)
                 self._emit("dispatch", assignment, coordinator.version, name)
 
         def collect():
@@ -97,7 +131,7 @@ class FedReviveWorkflow(FedBuffWorkflow):
                     raise RuntimeError("FedRevive run aborted")
                 dispatch()
                 identity = scheduler.next_result()
-                self._hook("on_time", scheduler.time)
+                self._notify("on_time", scheduler.time)
                 if identity is not None:
                     assignment = coordinator.active[identity]
                     result = results.load(identity)
@@ -106,7 +140,7 @@ class FedReviveWorkflow(FedBuffWorkflow):
                     scheduler.on_accept(identity)
                     self._emit("accept", assignment, version, completed_sites.pop(identity))
                     if published:
-                        self._hook("on_model", coordinator.model, coordinator.version)
+                        self._notify("on_model", coordinator.model, coordinator.version)
                     # Reference evaluation precedes logical refill.
                     continue
                 if scheduler.stopped:
@@ -137,26 +171,34 @@ class FedReviveRecipe(CollabRecipe):
         self,
         job_name,
         client,
-        application,
-        model_adapter,
+        model_loader,
+        model_ops,
         num_updates,
         concurrency,
+        prepared_data_root,
+        run_seed,
+        max_time,
         buffer_size=1,
         min_open_slots=1,
         server_lr=1.0,
         update_transform=None,
         call_timeout=3600.0,
+        observer=None,
         **collab_options,
     ):
         workflow = FedReviveWorkflow(
-            application,
-            model_adapter,
+            model_loader,
+            model_ops,
             num_updates,
             concurrency,
+            prepared_data_root,
+            run_seed,
+            max_time,
             buffer_size,
             min_open_slots,
             server_lr,
             update_transform=update_transform,
             call_timeout=call_timeout,
+            observer=observer,
         )
         super().__init__(job_name=job_name, server=workflow, client=client, **collab_options)

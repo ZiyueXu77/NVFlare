@@ -34,7 +34,7 @@ for _variable in (
 from client import FedReviveClient
 from data import DELAY_SCHEDULES, load_manifest, prepare_cifar10
 from fedrevive import FIGURE_2_METHOD_CONFIGS, ClassProportionSource, Method
-from server import FedReviveApplication, FedReviveModelAdapter
+from server import FedReviveModelLoader, FedReviveModelOps, FedReviveObserver
 from update import FedAvgUpdate, FedReviveUpdate
 from workflow import FedReviveRecipe
 
@@ -203,16 +203,12 @@ def make_recipe(args):
         class_proportion_source=class_proportion_source,
         generation_interval=generation_interval,
     )
-    application = FedReviveApplication(
+    observer = FedReviveObserver(
         data_root=args.data_root,
-        prepared_data_root=args.prepared_data_root,
         run_config=config,
         device=_device(args.server_device),
         eval_batch_size=args.eval_batch_size,
         eval_interval=(1 if method is Method.FEDAVG else 10) if args.eval_interval is None else args.eval_interval,
-        setup_seed=args.setup_seed,
-        run_seed=args.run_seed,
-        max_time=args.max_time,
     )
     transform = (
         FedReviveUpdate(
@@ -247,10 +243,16 @@ def make_recipe(args):
     server_call_threads = max(8, 2 * args.num_clients)
     client_call_threads = 4
     recipe_class = FedBuffRecipe if args.arrival_mode == "actual" else FedReviveRecipe
+    schedule_options = (
+        {}
+        if args.arrival_mode == "actual"
+        else dict(prepared_data_root=args.prepared_data_root, run_seed=args.run_seed, max_time=args.max_time)
+    )
     recipe = recipe_class(
         job_name=f"fedrevive_{method.value}",
-        application=application,
-        model_adapter=FedReviveModelAdapter(),
+        model_loader=FedReviveModelLoader(setup_seed=args.setup_seed),
+        model_ops=FedReviveModelOps(),
+        observer=observer,
         num_updates=args.max_model_versions,
         concurrency=concurrency,
         buffer_size=buffer_size,
@@ -263,6 +265,7 @@ def make_recipe(args):
         sync_task_timeout=600,
         max_call_threads_for_server=server_call_threads,
         max_call_threads_for_client=client_call_threads,
+        **schedule_options,
     )
     recipe.set_client_prop("data_root", args.data_root)
     recipe.set_client_prop("prepared_data_root", args.prepared_data_root)
@@ -321,9 +324,9 @@ def main():
         print(f"  Delay schedule: {args.delay_schedule}")
     print(f"  Global-version budget: {args.max_model_versions}")
     print(f"  Arrival mode: {args.arrival_mode}")
-    print(f"  Class-proportion source: {recipe.server.application.run_config['class_proportion_source']}")
+    print(f"  Class-proportion source: {recipe.server.observer.run_config['class_proportion_source']}")
     print(f"  Class-proportion probe count: {args.class_proportion_probe_count}")
-    print(f"  Generation interval: {recipe.server.application.run_config['generation_interval']}")
+    print(f"  Generation interval: {recipe.server.observer.run_config['generation_interval']}")
     print("=" * 80)
     run = recipe.execute(SimEnv(num_clients=args.num_clients, workspace_root=args.workspace_root))
     print("Job Status:", run.get_status())

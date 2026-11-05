@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Application-owned CIFAR models, evaluation and experiment artifacts."""
+"""FedRevive model operations, initialization and experiment artifacts."""
 
 import json
 import random
@@ -31,7 +31,7 @@ from torchvision import datasets
 from nvflare.collab import collab
 
 
-class FedReviveModelAdapter:
+class FedReviveModelOps:
     """Research arithmetic, including the reference tracker reset on publication.
 
     FedRevive clients upload full models. These models contain only floating
@@ -63,41 +63,43 @@ class FedReviveModelAdapter:
         return reset_tracker_stats_in_state(result)
 
 
-class FedReviveApplication:
-    """Data/model construction and artifacts; no transport or aggregation state."""
+class FedReviveModelLoader:
+    """Construct the initial model using the reference setup seed."""
+
+    def __init__(self, setup_seed=10):
+        self.setup_seed = setup_seed
+
+    def load_model(self):
+        torch.set_num_threads(1)
+        random.seed(self.setup_seed)
+        np.random.seed(self.setup_seed)
+        torch.manual_seed(self.setup_seed)
+        return get_model_params(create_model(), target_device="cpu")
+
+
+class FedReviveObserver:
+    """Evaluation and artifacts; no transport or aggregation state."""
 
     def __init__(
         self,
         data_root,
-        prepared_data_root,
         run_config,
         device=None,
         eval_batch_size=300,
         eval_interval=10,
-        setup_seed=10,
-        run_seed=10,
-        max_time=200.0,
     ):
-        if eval_batch_size < 1 or eval_interval < 1 or max_time <= 0:
-            raise ValueError("evaluation sizes/interval and max_time must be positive")
+        if eval_batch_size < 1 or eval_interval < 1:
+            raise ValueError("evaluation sizes and interval must be positive")
         self.data_root = data_root
-        self.prepared_data_root = prepared_data_root
         self.run_config = run_config
         self.device = device
         self.eval_batch_size = eval_batch_size
         self.eval_interval = eval_interval
-        self.setup_seed = setup_seed
-        self.run_seed = run_seed
-        self.max_time = max_time
 
     def _device(self):
         return torch.device(self.device or ("cuda" if torch.cuda.is_available() else "cpu"))
 
     def initialize(self):
-        torch.set_num_threads(1)
-        random.seed(self.setup_seed)
-        np.random.seed(self.setup_seed)
-        torch.manual_seed(self.setup_seed)
         self.run_dir = Path(collab.workspace.get_run_dir(collab.fl_ctx.get_job_id()))
         self.run_dir.mkdir(parents=True, exist_ok=True)
         config = self.run_dir / "run_config.json"
@@ -114,7 +116,6 @@ class FedReviveApplication:
             shuffle=False,
             num_workers=0,
         )
-        return get_model_params(create_model(), target_device="cpu")
 
     def on_time(self, simulated_time):
         self.simulated_time = simulated_time
